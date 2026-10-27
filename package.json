@@ -1,0 +1,19 @@
+{
+  "name": "distributed-music-platform",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Distributed Music Streaming Platform with Event-Driven Transcoding and HTTP 206 Byte-Range Delivery",
+  "scripts": {
+    "build": "pnpm --recursive run build",
+    "test": "pnpm --recursive run test",
+    "lint": "pnpm --recursive run lint",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down",
+    "docker:build": "docker compose up --build",
+    "seed": "pnpm --filter @music/catalog run seed"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.5"
+  },
+  "packageManager": "pnpm@11.10.0"
+}
