@@ -6,8 +6,15 @@ import { correlationIdMiddleware } from './middleware/correlation-id.js';
 import { errorHandler, notFoundHandler } from './middleware/error-handler.js';
 import { healthRouter } from './routes/health.js';
 import { proxyRouter } from './routes/proxy.js';
+import { createMemoryRateLimiter } from './rate-limit/memory-rate-limiter.js';
+import { rateLimitMiddleware } from './rate-limit/rate-limit.middleware.js';
+import type { RateLimiter } from './rate-limit/rate-limiter.js';
 
-export function createApp(): express.Application {
+export interface AppDeps {
+  rateLimiter?: RateLimiter;
+}
+
+export function createApp({ rateLimiter = createMemoryRateLimiter() }: AppDeps = {}): express.Application {
   const app = express();
 
   // Basic security and CORS headers
@@ -38,7 +45,14 @@ export function createApp(): express.Application {
 
   // Reverse proxy routes for microservices
   // Mount proxy before express.json() to allow unbuffered streaming and multipart file uploads
-  app.use('/api', proxyRouter);
+  app.use(
+    '/api',
+    rateLimitMiddleware(rateLimiter, {
+      limit: config.rateLimit.requestsPerMinute,
+      windowMs: config.rateLimit.windowMs
+    }),
+    proxyRouter
+  );
 
   // JSON parser for any native gateway endpoints
   app.use(express.json());

@@ -16,6 +16,10 @@ export const config = {
     host: process.env.REDIS_HOST || 'localhost',
     port: parseInt(process.env.REDIS_PORT || '6379', 10)
   },
+  rateLimit: {
+    requestsPerMinute: parseInt(process.env.RATE_LIMIT_PER_MINUTE || '300', 10),
+    windowMs: 60_000
+  },
   rabbitmq: {
     host: process.env.RABBITMQ_HOST || 'localhost',
     port: parseInt(process.env.RABBITMQ_PORT || '5672', 10),

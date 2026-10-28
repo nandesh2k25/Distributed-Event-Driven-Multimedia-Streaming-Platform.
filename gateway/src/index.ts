@@ -1,8 +1,10 @@
 import { createApp } from './app.js';
 import { config } from './config.js';
 import { logger } from './logger.js';
+import { createRedisRateLimiter } from './rate-limit/redis-rate-limiter.js';
 
-const app = createApp();
+const rateLimiter = createRedisRateLimiter(`redis://${config.redis.host}:${config.redis.port}`);
+const app = createApp({ rateLimiter });
 
 const server = app.listen(config.port, () => {
   logger.info(
@@ -14,6 +16,7 @@ const server = app.listen(config.port, () => {
 // Graceful shutdown handling
 function handleShutdown(signal: string) {
   logger.info({ signal }, 'Graceful shutdown initiated');
+  void rateLimiter.close();
   server.close(() => {
     logger.info('API Gateway HTTP server closed cleanly');
     process.exit(0);
