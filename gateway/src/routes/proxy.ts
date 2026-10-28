@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { createProxyMiddleware } from 'http-proxy-middleware';
 import { config } from '../config.js';
-import { requireLogin } from '../auth/authenticate.js';
+import { readOnly, requireLogin } from '../auth/authenticate.js';
 import { CORRELATION_ID_HEADER } from '../middleware/correlation-id.js';
 import { createErrorResponse } from '@music/shared';
 
@@ -46,12 +46,12 @@ function createServiceProxy(targetUrl: string, pathPrefix: string) {
 proxyRouter.use('/auth', createServiceProxy(config.services.auth, '/api/auth'));
 
 // Catalog Service: /api/catalog, /api/albums, /api/artists, /api/tracks, /api/genres, /api/search
-proxyRouter.use('/catalog', createServiceProxy(config.services.catalog, '/api/catalog'));
-proxyRouter.use('/albums', createServiceProxy(config.services.catalog, '/api/albums'));
-proxyRouter.use('/artists', createServiceProxy(config.services.catalog, '/api/artists'));
-proxyRouter.use('/tracks', createServiceProxy(config.services.catalog, '/api/tracks'));
-proxyRouter.use('/genres', createServiceProxy(config.services.catalog, '/api/genres'));
-proxyRouter.use('/search', createServiceProxy(config.services.catalog, '/api/search'));
+proxyRouter.use('/catalog', readOnly, createServiceProxy(config.services.catalog, '/api/catalog'));
+proxyRouter.use('/albums', readOnly, createServiceProxy(config.services.catalog, '/api/albums'));
+proxyRouter.use('/artists', readOnly, createServiceProxy(config.services.catalog, '/api/artists'));
+proxyRouter.use('/tracks', readOnly, createServiceProxy(config.services.catalog, '/api/tracks'));
+proxyRouter.use('/genres', readOnly, createServiceProxy(config.services.catalog, '/api/genres'));
+proxyRouter.use('/search', readOnly, createServiceProxy(config.services.catalog, '/api/search'));
 
 // Playlist Service: /api/playlists, /api/favorites (signed-in users only)
 proxyRouter.use('/playlists', requireLogin, createServiceProxy(config.services.playlist, '/api/playlists'));

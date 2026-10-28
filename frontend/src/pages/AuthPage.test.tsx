@@ -3,11 +3,17 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AuthProvider } from '../context/AuthContext';
 import { AudioPlayerProvider } from '../context/AudioPlayerContext';
+import { FavoritesProvider } from '../context/FavoritesContext';
 import { TrackRow } from '../components/Cards';
 import { clearSession, getToken } from '../lib/session';
 import AuthPage from './AuthPage';
 
 const reply = (status: number, body: unknown) => Promise.resolve(new Response(JSON.stringify(body), { status }));
+/** Auth calls get `authReply`; everything else (e.g. the favorites load) gets an empty success. */
+const respondToAuthWith = (status: number, body: unknown) =>
+  fetchMock.mockImplementation((url: string) =>
+    url.includes('/auth/') ? reply(status, body) : reply(200, { success: true, data: [] })
+  );
 const user = { id: 'u1', email: 'ada@example.com', displayName: 'Ada' };
 
 let fetchMock: ReturnType<typeof vi.fn<any[], any>>;
@@ -27,6 +33,7 @@ function renderAt(path: string, state?: object) {
     <MemoryRouter initialEntries={[{ pathname: path, state }]}>
       <AuthProvider>
         <AudioPlayerProvider>
+          <FavoritesProvider>
           <Routes>
             <Route path="/login" element={<AuthPage mode="login" />} />
             <Route path="/signup" element={<AuthPage mode="signup" />} />
@@ -42,6 +49,7 @@ function renderAt(path: string, state?: object) {
               }
             />
           </Routes>
+          </FavoritesProvider>
         </AudioPlayerProvider>
       </AuthProvider>
     </MemoryRouter>
@@ -50,11 +58,11 @@ function renderAt(path: string, state?: object) {
 
 describe('login page', () => {
   it('signs in, keeps the token, and returns to where the guest came from', async () => {
-    fetchMock.mockReturnValue(reply(200, { success: true, data: { token: 'jwt-1', user } }));
+    respondToAuthWith(200, { success: true, data: { token: 'jwt-1', user } });
     renderAt('/login', { from: '/albums/1' });
 
     fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'ada@example.com' } });
-    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'correct horse' } });
+    fireEvent.change(screen.getByLabelText(/^Password/), { target: { value: 'correct horse' } });
     fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
 
     expect(await screen.findByText('album page')).toBeTruthy();
@@ -66,13 +74,11 @@ describe('login page', () => {
   });
 
   it('shows the server message and stays signed out on bad credentials', async () => {
-    fetchMock.mockReturnValue(
-      reply(401, { success: false, error: { code: 'INVALID_CREDENTIALS', message: 'Incorrect email or password' } })
-    );
+    respondToAuthWith(401, { success: false, error: { code: 'INVALID_CREDENTIALS', message: 'Incorrect email or password' } });
     renderAt('/login');
 
     fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'ada@example.com' } });
-    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'nope' } });
+    fireEvent.change(screen.getByLabelText(/^Password/), { target: { value: 'nope' } });
     fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
 
     expect((await screen.findByRole('alert')).textContent).toBe('Incorrect email or password');
@@ -80,12 +86,12 @@ describe('login page', () => {
   });
 
   it('signs up with a display name', async () => {
-    fetchMock.mockReturnValue(reply(201, { success: true, data: { token: 'jwt-2', user } }));
+    respondToAuthWith(201, { success: true, data: { token: 'jwt-2', user } });
     renderAt('/signup');
 
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Ada' } });
     fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'ada@example.com' } });
-    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'correct horse' } });
+    fireEvent.change(screen.getByLabelText(/^Password/), { target: { value: 'correct horse' } });
     fireEvent.click(screen.getByRole('button', { name: 'Sign up' }));
 
     await waitFor(() => expect(getToken()).toBe('jwt-2'));

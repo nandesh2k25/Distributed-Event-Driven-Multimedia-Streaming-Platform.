@@ -1,10 +1,9 @@
-/**
- * Dev helper: uploads a generated WAV tone for every READY catalog track to MinIO so the
- * seeded tracks are actually playable. Run after `pnpm seed` with Catalog + MinIO up.
- */
 import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
-import { config } from '../src/config.js';
 
+/**
+ * Generates a short synthetic tune per seeded track and stores it in MinIO under the track's
+ * storage key, so `pnpm seed` leaves a catalog that is actually playable.
+ */
 const SAMPLE_RATE = 11025;
 const MAX_SECONDS = 300;
 const SCALE = [0, 2, 4, 7, 9, 12, 9, 7]; // major-pentatonic-ish arpeggio, semitones from root
@@ -41,39 +40,36 @@ function makeWav(seconds: number, seed: number): Buffer {
   return Buffer.concat([header, data]);
 }
 
-async function main() {
-  const res = await fetch(`${config.catalogUrl}/api/tracks?limit=100`);
-  if (!res.ok) throw new Error(`Catalog returned ${res.status}`);
-  const { data: tracks } = (await res.json()) as {
-    data: { id: string; title: string; duration: number; storageKey: string | null }[];
-  };
-
-  const s3 = new S3Client({
-    endpoint: config.minio.endpoint,
-    region: config.minio.region,
-    forcePathStyle: true,
-    credentials: { accessKeyId: config.minio.accessKeyId, secretAccessKey: config.minio.secretAccessKey }
-  });
-
-  let uploaded = 0;
-  for (const [index, track] of tracks.entries()) {
-    if (!track.storageKey) continue;
-    const wav = makeWav(Math.min(track.duration || 30, MAX_SECONDS), index);
-    await s3.send(
-      new PutObjectCommand({
-        Bucket: config.minio.bucket,
-        Key: track.storageKey,
-        Body: wav,
-        ContentType: 'audio/wav'
-      })
-    );
-    uploaded++;
-    console.log(`uploaded ${track.storageKey} (${(wav.length / 1024 / 1024).toFixed(1)} MB) - ${track.title}`);
-  }
-  console.log(`Done: ${uploaded} tracks uploaded to ${config.minio.bucket}`);
+export interface SeedTrackAudio {
+  storageKey: string;
+  title: string;
+  duration: number;
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+export async function uploadDemoAudio(tracks: SeedTrackAudio[]): Promise<void> {
+  const bucket = process.env.MINIO_BUCKET || 'processed-audio';
+  const s3 = new S3Client({
+    endpoint: process.env.MINIO_ENDPOINT || 'http://localhost:9000',
+    region: process.env.MINIO_REGION || 'us-east-1',
+    forcePathStyle: true,
+    credentials: {
+      accessKeyId: process.env.MINIO_ACCESS_KEY || 'minioadmin',
+      secretAccessKey: process.env.MINIO_SECRET_KEY || 'minioadmin'
+    }
+  });
+
+  try {
+    for (const [index, track] of tracks.entries()) {
+      const wav = makeWav(Math.min(track.duration || 30, MAX_SECONDS), index);
+      await s3.send(
+        new PutObjectCommand({ Bucket: bucket, Key: track.storageKey, Body: wav, ContentType: 'audio/wav' })
+      );
+      console.log(`uploaded ${track.storageKey} (${(wav.length / 1024 / 1024).toFixed(1)} MB) - ${track.title}`);
+    }
+  } catch (err) {
+    throw new Error(
+      `Could not upload demo audio to MinIO (is it running? try "pnpm docker:up"). Set SEED_SKIP_AUDIO=1 to seed metadata only. ${(err as Error).message}`
+    );
+  }
+  console.log(`Uploaded ${tracks.length} demo tracks to ${bucket}`);
+}

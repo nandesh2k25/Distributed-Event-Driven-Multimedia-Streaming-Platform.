@@ -103,6 +103,18 @@ describe('gateway authentication', () => {
     expect(res.body.userId).toBe('user-7');
   });
 
+  it.each([
+    ['post', '/api/tracks'],
+    ['post', '/api/tracks/batch'],
+    ['patch', '/api/tracks/t1'],
+    ['post', '/api/catalog/tracks/uploads']
+  ] as const)('keeps the catalog read-only: %s %s is refused even for a signed-in user', async (method, path) => {
+    reset();
+    const res = await request(app)[method](path).set('Authorization', `Bearer ${token()}`).send({});
+    expect(res.status).toBe(405);
+    expect(hits).toBe(0);
+  });
+
   it('keeps signup and login reachable without a token', async () => {
     reset();
     const res = await request(app).post('/api/auth/login').send({});

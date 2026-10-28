@@ -1,4 +1,5 @@
 import { PrismaClient, TrackStatus } from '@prisma/client';
+import { uploadDemoAudio } from './seed-audio';
 
 const prisma = new PrismaClient();
 
@@ -332,6 +333,12 @@ async function main() {
         data: trackPayload
       });
     }
+  }
+
+  if (process.env.SEED_SKIP_AUDIO === '1') {
+    console.log('SEED_SKIP_AUDIO=1: skipping demo audio upload');
+  } else {
+    await uploadDemoAudio(tracksData);
   }
 
   console.log(`Successfully seeded ${genresData.length} genres, ${artistsData.length} artists, ${albumsData.length} albums, and ${tracksData.length} tracks.`);

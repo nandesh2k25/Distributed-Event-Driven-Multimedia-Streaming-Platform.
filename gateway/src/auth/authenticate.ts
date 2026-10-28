@@ -44,3 +44,12 @@ export function requireLogin(req: Request, res: Response, next: NextFunction): v
   }
   next();
 }
+
+/**
+ * The Catalog's write endpoints exist for the other services, which call it directly. Through the
+ * gateway the catalog is read-only, so a client cannot create or edit tracks.
+ */
+export function readOnly(req: Request, res: Response, next: NextFunction): void {
+  if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') return next();
+  res.status(405).json(createErrorResponse('METHOD_NOT_ALLOWED', 'This resource is read-only'));
+}
