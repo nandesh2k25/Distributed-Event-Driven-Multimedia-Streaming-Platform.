@@ -9,7 +9,7 @@ export interface Album {
 }
 export interface Track {
   id: string; title: string; duration: number; status: string; trackNumber?: number | null;
-  artist?: Artist; album?: Album | null; genre?: Genre | null; waveformPeaks?: number[];
+  artist?: Artist; album?: Album | null; genre?: Genre | string | null; waveformPeaks?: number[];
 }
 export interface Meta { page?: number; limit?: number; total?: number; totalPages?: number }
 export interface SearchResults { tracks: Track[]; artists: Artist[]; albums: Album[]; query: string }
@@ -27,6 +27,7 @@ async function get<T>(path: string, signal?: AbortSignal): Promise<{ data: T; me
 
 export const api = {
   tracks: (params = '', signal?: AbortSignal) => get<Track[]>(`/tracks${params}`, signal),
+  track: (id: string, signal?: AbortSignal) => get<Track>(`/tracks/${id}`, signal),
   artists: (signal?: AbortSignal) => get<Artist[]>('/artists', signal),
   artist: (id: string, signal?: AbortSignal) => get<Artist & { albums: Album[]; tracks: Track[] }>(`/artists/${id}`, signal),
   albums: (signal?: AbortSignal) => get<Album[]>('/albums', signal),

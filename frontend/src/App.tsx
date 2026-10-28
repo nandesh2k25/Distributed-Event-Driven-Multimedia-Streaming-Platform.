@@ -1,5 +1,6 @@
 import { Link, Route, Routes } from 'react-router-dom';
-import { Music } from 'lucide-react';
+import { Music, UploadCloud } from 'lucide-react';
+import UploadPage from './pages/UploadPage';
 import { AudioPlayerProvider } from './context/AudioPlayerContext';
 import { PlayerBar } from './components/PlayerBar';
 import { SearchBar } from './components/SearchBar';
@@ -18,12 +19,17 @@ export default function App() {
           <span className="hidden sm:inline">Music Library</span>
         </Link>
         <SearchBar />
+        <Link to="/upload" className="ml-auto flex shrink-0 items-center gap-2 rounded-full bg-zinc-800 px-3 py-2 text-sm hover:bg-zinc-700">
+          <UploadCloud className="h-4 w-4" />
+          <span className="hidden sm:inline">Upload</span>
+        </Link>
       </header>
       {/* pb-24 reserves room for the fixed bottom player bar */}
       <main className="mx-auto max-w-7xl px-4 py-8 pb-24 sm:px-8">
         <Routes>
           <Route path="/" element={<BrowsePage />} />
           <Route path="/search" element={<SearchPage />} />
+          <Route path="/upload" element={<UploadPage />} />
           <Route path="/albums/:id" element={<AlbumPage />} />
           <Route path="/artists/:id" element={<ArtistPage />} />
           <Route path="*" element={<p className="text-zinc-400">Page not found.</p>} />

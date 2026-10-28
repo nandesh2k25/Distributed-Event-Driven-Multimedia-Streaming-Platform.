@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { tracksService } from '../services/tracks.service.js';
-import { TrackQuerySchema, createSuccessResponse, createErrorResponse } from '@music/shared';
+import type { Prisma } from '@prisma/client';
+import { TrackQuerySchema, UpdateTrackSchema, createSuccessResponse, createErrorResponse } from '@music/shared';
 
 export async function listTracks(req: Request, res: Response) {
   try {
@@ -92,9 +93,23 @@ export async function updateTrack(req: Request, res: Response) {
       return res.status(400).json(createErrorResponse('VALIDATION_ERROR', 'Track ID is required'));
     }
 
-    const track = await tracksService.updateTrack(id, req.body);
+    const parsed = UpdateTrackSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json(
+        createErrorResponse(
+          'VALIDATION_ERROR',
+          'Invalid track update',
+          parsed.error.errors.map((e) => ({ field: e.path.join('.'), message: e.message }))
+        )
+      );
+    }
+
+    const track = await tracksService.updateTrack(id, parsed.data as Prisma.TrackUpdateInput);
     return res.status(200).json(createSuccessResponse(track));
   } catch (err: any) {
+    if (err?.code === 'P2025') {
+      return res.status(404).json(createErrorResponse('TRACK_NOT_FOUND', 'Track not found'));
+    }
     req.log?.error({ err, id: req.params.id }, 'Failed to update track');
     return res.status(500).json(
       createErrorResponse('INTERNAL_ERROR', 'Failed to update track')

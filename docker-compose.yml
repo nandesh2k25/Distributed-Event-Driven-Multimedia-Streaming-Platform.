@@ -93,6 +93,27 @@ services:
     networks:
       - music-network
 
+  # FFmpeg transcoding worker. The Catalog Service runs on the host in dev, hence host.docker.internal.
+  worker:
+    build:
+      context: .
+      dockerfile: services/worker/Dockerfile
+    container_name: music-worker
+    restart: unless-stopped
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      minio-create-buckets:
+        condition: service_completed_successfully
+    environment:
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+      MINIO_ENDPOINT: http://minio:9000
+      CATALOG_SERVICE_URL: http://host.docker.internal:3001
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - music-network
+
 volumes:
   postgres_data:
   redis_data:

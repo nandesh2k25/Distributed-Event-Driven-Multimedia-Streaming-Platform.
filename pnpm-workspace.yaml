@@ -8,9 +8,9 @@ allowBuilds:
   '@prisma/client': true
   '@prisma/engines': true
   prisma: true
+  esbuild: false
 
 onlyBuiltDependencies:
-  - esbuild
   - "@prisma/client"
   - "@prisma/engines"
   - prisma

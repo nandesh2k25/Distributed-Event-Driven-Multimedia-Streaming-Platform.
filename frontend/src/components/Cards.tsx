@@ -75,7 +75,7 @@ export function TrackRow({ track, index, queue }: { track: Track; index?: number
       </div>
       {track.genre && (
         <span className="hidden rounded-full bg-zinc-800 px-2 py-0.5 text-xs text-zinc-300 sm:inline">
-          {track.genre.name}
+          {typeof track.genre === 'string' ? track.genre : track.genre.name}
         </span>
       )}
       <span className="w-12 text-right text-sm tabular-nums text-zinc-400">{formatDuration(track.duration)}</span>

@@ -16,6 +16,8 @@ For a detailed breakdown of the system architecture, microservices design, and M
 | **RabbitMQ 3** | `5672` / `15672` | AMQP message broker for asynchronous media transcoding jobs & web management dashboard |
 | **MinIO S3** | `9000` / `9001` | High-performance S3-compatible object storage (`raw-audio` and `processed-audio` buckets) & console UI |
 | **Catalog Service** | `3001` | Prisma/PostgreSQL catalog (artists, albums, tracks, genres), search, Redis-cached listings |
+| **Ingestion Service** | `3003` | Validates and streams uploads to MinIO, creates a `PROCESSING` track, dispatches jobs to RabbitMQ (`audio.events`) |
+| **Transcode Worker** | N/A | Dockerized FFmpeg worker: 320 kbps MP3 + 128 waveform peaks, DLQ for failures |
 | **Streaming Service** | `3004` | HTTP 206 byte-range audio delivery from MinIO (`/api/stream/:trackId`) |
 | **Frontend** | `5173` | React 19 + Vite + Tailwind SPA (browse and live search) |
 | **Shared Contracts** | N/A | `@music/shared` monorepo package exporting domain models, events, range utils, and Zod schemas |
@@ -115,15 +117,25 @@ Run each in its own terminal. Dev mode gives hot reload:
 ```bash
 pnpm --filter @music/catalog dev    # Catalog Service  -> http://localhost:3001
 pnpm --filter @music/streaming dev  # Streaming Service-> http://localhost:3004
+pnpm --filter @music/ingestion dev  # Ingestion Service-> http://localhost:3003
 pnpm --filter @music/gateway dev    # API Gateway      -> http://localhost:8080
 pnpm --filter @music/frontend dev   # React frontend   -> http://localhost:5173
 ```
 
-Or run the compiled builds with `pnpm --filter <package> start` (`@music/catalog`, `@music/streaming`, `@music/gateway`). The frontend dev server proxies `/api/*` to the gateway; set `GATEWAY_URL` to point it elsewhere.
+Then start the FFmpeg transcoding worker. It runs in Docker because it needs FFmpeg, and `docker compose up -d` already starts it with the rest of the infrastructure:
 
-Open **http://localhost:5173** to browse the catalog, search, and play tracks from the persistent bottom player bar.
+```bash
+docker compose up -d --build worker
+docker logs -f music-worker     # "Worker consuming audio.transcode.queue"
+```
 
-> **Note:** The Playlist and Ingestion services are not implemented yet (tickets 04-05). Their gateway routes return `503` until they exist.
+The worker reaches the Catalog Service on your host at `host.docker.internal:3001`, so keep the catalog running. To run the worker on the host instead, install FFmpeg and run `pnpm --filter @music/worker dev`.
+
+Or run the compiled builds with `pnpm --filter <package> start` (`@music/catalog`, `@music/streaming`, `@music/ingestion`, `@music/gateway`). The frontend dev server proxies `/api/*` to the gateway; set `GATEWAY_URL` to point it elsewhere.
+
+Open **http://localhost:5173** to browse the catalog, search, and play tracks from the persistent bottom player bar. Use **Upload** in the header to add your own audio: the Upload Studio shows the track moving from `PROCESSING` to `READY`, and playing it shows its waveform in the player bar (click or drag the waveform to seek).
+
+> **Note:** The Playlist service is not implemented yet (ticket 05). Its gateway routes return `503` until it exists.
 
 ---
 
@@ -167,6 +179,18 @@ curl http://localhost:8080/api/albums
 curl http://localhost:8080/api/genres
 ```
 
+### Upload and Transcoding Pipeline
+
+```bash
+curl -i -X POST http://localhost:8080/api/ingest/upload \
+  -F title="My Song" -F artistName="My Band" -F genre="Rock" -F albumTitle="Debut" \
+  -F "file=@song.flac;type=audio/flac"
+```
+
+Send the metadata fields **before** the file part. Expect `202 Accepted` with `{ "trackId": "...", "status": "PROCESSING" }` immediately. The worker then transcodes to 320 kbps MP3, computes 128 waveform peaks and flips the track to `READY` (check with `GET /api/tracks/<trackId>`). Unsupported file types are rejected with `400 INVALID_FILE_TYPE`.
+
+Jobs that fail (for example a corrupt file) mark the track `FAILED` and are dead-lettered to `audio.transcode.dlq`; inspect them in the RabbitMQ console at http://localhost:15672.
+
 ### Byte-Range Streaming
 
 ```bash
@@ -208,7 +232,7 @@ curl -i -H "X-Correlation-ID: 9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d" http://local
 ├── frontend/           # React + Vite + Tailwind SPA
 ├── gateway/            # Express ingress reverse proxy & health aggregator
 ├── scripts/            # Infrastructure bootstrap & database init scripts
-├── services/           # Backend microservices (Catalog, Playlist, Ingestion, Streaming)
+├── services/           # Backend microservices (Catalog, Ingestion, Worker, Streaming; Playlist to come)
 ├── shared/             # Shared TypeScript models, DTOs, events & range utilities
 ├── docker-compose.yml  # Multi-container orchestration specification
 ├── package.json        # Monorepo root scripts & configuration

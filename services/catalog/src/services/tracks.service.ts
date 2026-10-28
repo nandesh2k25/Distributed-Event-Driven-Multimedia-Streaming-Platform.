@@ -164,6 +164,8 @@ export class TracksService {
     });
 
     await delCache(`catalog:track:${id}`);
+    await delCachePattern('catalog:artist:*');
+    await delCachePattern('catalog:album:*');
     await delCachePattern('catalog:tracks:*');
     await delCachePattern('catalog:search:*');
     return track;

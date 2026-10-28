@@ -1,10 +1,12 @@
 import { Pause, Play, SkipBack, SkipForward, Volume2, VolumeX } from 'lucide-react';
 import { useAudioPlayer } from '../context/AudioPlayerContext';
 import { formatDuration } from '../lib/api';
+import { WaveformVisualizer } from './WaveformVisualizer';
 
 export function PlayerBar() {
   const p = useAudioPlayer();
   const { currentTrack: track, duration, currentTime } = p;
+  const hasWaveform = !!track?.waveformPeaks && track.waveformPeaks.length > 0;
   const pct = (value: number) => (duration > 0 ? Math.min(100, (value / duration) * 100) : 0);
 
   return (
@@ -44,6 +46,17 @@ export function PlayerBar() {
 
         <div className="flex w-full max-w-xl items-center gap-2 text-xs tabular-nums text-zinc-400">
           <span className="w-10 text-right">{formatDuration(currentTime)}</span>
+          {hasWaveform ? (
+            <div className="flex-1">
+              <WaveformVisualizer
+                peaks={track!.waveformPeaks!}
+                duration={duration}
+                currentTime={currentTime}
+                onSeek={p.seek}
+                height={32}
+              />
+            </div>
+          ) : (
           <div className="relative h-5 flex-1">
             {/* track + buffered intervals + played portion */}
             <div className="pointer-events-none absolute inset-x-0 top-1/2 h-1 -translate-y-1/2 overflow-hidden rounded-full bg-zinc-700">
@@ -69,6 +82,7 @@ export function PlayerBar() {
               className="absolute inset-0 h-full w-full cursor-pointer opacity-0 disabled:cursor-default"
             />
           </div>
+          )}
           <span className="w-10">{formatDuration(duration)}</span>
         </div>
       </div>

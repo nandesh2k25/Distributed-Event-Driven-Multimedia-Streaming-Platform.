@@ -51,7 +51,32 @@ export const AudioUploadMetadataSchema = z.object({
   duration: z.coerce.number().positive().optional()
 });
 
-export type PaginationQuery = z.infer<typeof PaginationQuerySchema>;
+export const ResolveNameSchema = z.object({
+  name: z.string().trim().min(1, 'Name is required').max(200)
+});
+
+export const ResolveAlbumSchema = z.object({
+  title: z.string().trim().min(1, 'Title is required').max(200),
+  artistId: z.string().trim().min(1, 'artistId is required')
+});
+
+/** Fields that may be changed through PATCH /tracks/:id. */
+export const UpdateTrackSchema = z
+  .object({
+    title: z.string().trim().min(1).max(200),
+    status: z.enum(['PENDING', 'PROCESSING', 'READY', 'FAILED']),
+    duration: z.number().nonnegative(),
+    bitrate: z.number().int().positive(),
+    format: z.string().trim().min(1).max(20),
+    storageKey: z.string().min(1),
+    waveformPeaks: z.array(z.number().min(0).max(1)).max(512),
+    variants: z.array(z.unknown())
+  })
+  .partial()
+  .strict();
+
+export type UpdateTrackInput = z.infer<typeof UpdateTrackSchema>;
+export type PaginationQuery= z.infer<typeof PaginationQuerySchema>;
 export type TrackQuery = z.infer<typeof TrackQuerySchema>;
 export type CreatePlaylistInput = z.infer<typeof CreatePlaylistSchema>;
 export type UpdatePlaylistInput = z.infer<typeof UpdatePlaylistSchema>;
