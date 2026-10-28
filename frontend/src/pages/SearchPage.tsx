@@ -15,7 +15,7 @@ export default function SearchPage() {
       <Status loading={loading} error={error} empty={!!data && total === 0} />
       {data && data.tracks.length > 0 && (
         <Section title="Tracks">
-          <ul>{data.tracks.map((t, i) => <TrackRow key={t.id} track={t} index={i + 1} />)}</ul>
+          <ul>{data.tracks.map((t, i) => <TrackRow key={t.id} track={t} index={i + 1} queue={data.tracks} />)}</ul>
         </Section>
       )}
       {data && data.artists.length > 0 && (

@@ -33,7 +33,7 @@ export default function BrowsePage() {
 
       <Section title="Tracks">
         <Status loading={tracks.loading} error={tracks.error} empty={tracks.data?.length === 0} />
-        <ul>{tracks.data?.map((t, i) => <TrackRow key={t.id} track={t} index={i + 1} />)}</ul>
+        <ul>{tracks.data?.map((t, i) => <TrackRow key={t.id} track={t} index={i + 1} queue={tracks.data ?? []} />)}</ul>
       </Section>
 
       <Section title="Artists">

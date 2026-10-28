@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
-import { Disc3, User } from 'lucide-react';
+import { Disc3, Pause, Play, User } from 'lucide-react';
+import { useAudioPlayer } from '../context/AudioPlayerContext';
 import { type Album, type Artist, type Track, formatDuration } from '../lib/api';
 
 export function AlbumCard({ album }: { album: Album }) {
@@ -37,10 +38,23 @@ export function ArtistCard({ artist }: { artist: Artist }) {
   );
 }
 
-export function TrackRow({ track, index }: { track: Track; index?: number }) {
+export function TrackRow({ track, index, queue }: { track: Track; index?: number; queue?: Track[] }) {
+  const player = useAudioPlayer();
+  const isCurrent = player.currentTrack?.id === track.id;
+  const isPlaying = isCurrent && player.isPlaying;
+
   return (
-    <li className="flex items-center gap-4 rounded-md px-3 py-2 hover:bg-zinc-800">
-      <span className="w-6 text-right text-sm text-zinc-500">{index ?? ''}</span>
+    <li className={`group flex items-center gap-4 rounded-md px-3 py-2 hover:bg-zinc-800 ${isCurrent ? 'bg-zinc-800/60' : ''}`}>
+      <button
+        onClick={() => (isCurrent ? player.togglePlay() : player.playTrack(track, queue))}
+        aria-label={`${isPlaying ? 'Pause' : 'Play'} ${track.title}`}
+        className="flex h-6 w-6 items-center justify-center text-sm text-zinc-500"
+      >
+        <span className={isCurrent ? 'hidden' : 'group-hover:hidden'}>{index ?? ''}</span>
+        <span className={isCurrent ? 'text-accent' : 'hidden text-white group-hover:inline'}>
+          {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+        </span>
+      </button>
       <div className="min-w-0 flex-1">
         <p className="truncate font-medium">{track.title}</p>
         <p className="truncate text-sm text-zinc-400">

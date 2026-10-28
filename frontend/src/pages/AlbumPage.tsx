@@ -22,7 +22,7 @@ export default function AlbumPage() {
           </p>
           <ul>
             {album.tracks?.map((t, i) => (
-              <TrackRow key={t.id} track={t} index={t.trackNumber ?? i + 1} />
+              <TrackRow key={t.id} track={{ ...t, artist: t.artist ?? album.artist }} index={t.trackNumber ?? i + 1} queue={album.tracks} />
             ))}
           </ul>
         </>

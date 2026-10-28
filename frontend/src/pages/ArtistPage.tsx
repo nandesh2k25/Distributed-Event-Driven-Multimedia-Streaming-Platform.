@@ -19,7 +19,7 @@ export default function ArtistPage() {
             </div>
           </Section>
           <Section title="Tracks">
-            <ul>{artist.tracks?.map((t, i) => <TrackRow key={t.id} track={{ ...t, artist }} index={i + 1} />)}</ul>
+            <ul>{artist.tracks?.map((t, i) => <TrackRow key={t.id} track={{ ...t, artist }} index={i + 1} queue={artist.tracks?.map((x) => ({ ...x, artist }))} />)}</ul>
           </Section>
         </>
       )}

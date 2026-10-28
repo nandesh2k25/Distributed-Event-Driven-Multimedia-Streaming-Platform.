@@ -16,6 +16,7 @@ For a detailed breakdown of the system architecture, microservices design, and M
 | **RabbitMQ 3** | `5672` / `15672` | AMQP message broker for asynchronous media transcoding jobs & web management dashboard |
 | **MinIO S3** | `9000` / `9001` | High-performance S3-compatible object storage (`raw-audio` and `processed-audio` buckets) & console UI |
 | **Catalog Service** | `3001` | Prisma/PostgreSQL catalog (artists, albums, tracks, genres), search, Redis-cached listings |
+| **Streaming Service** | `3004` | HTTP 206 byte-range audio delivery from MinIO (`/api/stream/:trackId`) |
 | **Frontend** | `5173` | React 19 + Vite + Tailwind SPA (browse and live search) |
 | **Shared Contracts** | N/A | `@music/shared` monorepo package exporting domain models, events, range utils, and Zod schemas |
 
@@ -93,6 +94,12 @@ pnpm --filter @music/catalog exec prisma migrate deploy
 pnpm seed
 ```
 
+The seed only stores metadata. To make the seeded tracks playable, start the Catalog Service (step 8) and upload generated demo audio to MinIO:
+
+```bash
+pnpm --filter @music/streaming seed:audio
+```
+
 ### 7. Run the Automated Test Suite
 
 Catalog tests run against the live PostgreSQL and Redis containers, so complete steps 3 and 6 first:
@@ -107,15 +114,16 @@ Run each in its own terminal. Dev mode gives hot reload:
 
 ```bash
 pnpm --filter @music/catalog dev    # Catalog Service  -> http://localhost:3001
+pnpm --filter @music/streaming dev  # Streaming Service-> http://localhost:3004
 pnpm --filter @music/gateway dev    # API Gateway      -> http://localhost:8080
 pnpm --filter @music/frontend dev   # React frontend   -> http://localhost:5173
 ```
 
-Or run the compiled builds with `pnpm --filter <package> start` (`@music/catalog`, `@music/gateway`). The frontend dev server proxies `/api/*` to the gateway; set `GATEWAY_URL` to point it elsewhere.
+Or run the compiled builds with `pnpm --filter <package> start` (`@music/catalog`, `@music/streaming`, `@music/gateway`). The frontend dev server proxies `/api/*` to the gateway; set `GATEWAY_URL` to point it elsewhere.
 
-Open **http://localhost:5173** to browse the catalog and use the live search.
+Open **http://localhost:5173** to browse the catalog, search, and play tracks from the persistent bottom player bar.
 
-> **Note:** The Playlist, Ingestion and Streaming services are not implemented yet (tickets 03-05). Their gateway routes return `503` until they exist.
+> **Note:** The Playlist and Ingestion services are not implemented yet (tickets 04-05). Their gateway routes return `503` until they exist.
 
 ---
 
@@ -158,6 +166,15 @@ curl http://localhost:8080/api/artists
 curl http://localhost:8080/api/albums
 curl http://localhost:8080/api/genres
 ```
+
+### Byte-Range Streaming
+
+```bash
+TRACK_ID=$(curl -s "http://localhost:8080/api/tracks?limit=1" | node -pe "JSON.parse(require('fs').readFileSync(0)).data[0].id")
+curl -i -H "Range: bytes=0-1048575" -o /dev/null http://localhost:8080/api/stream/$TRACK_ID
+```
+
+Expect `206 Partial Content` with `Content-Range`, `Accept-Ranges: bytes` and an exact `Content-Length`. An out-of-bounds range returns `416`.
 
 `/api/catalog/*` is also routed to the Catalog Service. All responses use the `{ success, data, meta }` envelope.
 
