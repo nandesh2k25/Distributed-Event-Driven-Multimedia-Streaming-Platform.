@@ -1,6 +1,6 @@
 import type { AddTrackToPlaylistInput, CreatePlaylistInput, UpdatePlaylistInput } from '@music/shared';
 import type { Playlist, PlaylistTrack, Prisma, PrismaClient } from '../generated/client/index.js';
-import type { CatalogClient } from '../catalog-client.js';
+import type { CatalogClient } from '@music/shared';
 import { AppError } from '../http.js';
 
 type Tx = Prisma.TransactionClient;
@@ -43,7 +43,7 @@ export function createPlaylistsService(prisma: PrismaClient, catalog: CatalogCli
   const touch = (tx: Tx, id: string) => tx.playlist.update({ where: { id }, data: { updatedAt: new Date() } });
 
   async function hydrate(rows: PlaylistTrack[], correlationId?: string) {
-    const tracks = await catalog.getTracks(rows.map((r) => r.trackId), correlationId);
+    const tracks = await catalog.getTracks(rows.map((r) => r.trackId), { correlationId });
     const byId = new Map(tracks.map((t) => [t.id, t]));
     // `track: null` means the catalog no longer has it; the entry stays so it can still be removed.
     return rows.map((r) => ({ trackId: r.trackId, position: r.position, addedAt: r.addedAt, track: byId.get(r.trackId) ?? null }));
@@ -80,7 +80,7 @@ export function createPlaylistsService(prisma: PrismaClient, catalog: CatalogCli
     },
 
     async addTrack(id: string, userId: string, input: AddTrackToPlaylistInput, correlationId?: string) {
-      const found = await catalog.getTracks([input.trackId], correlationId);
+      const found = await catalog.getTracks([input.trackId], { correlationId });
       if (found.length === 0) throw new AppError(404, 'TRACK_NOT_FOUND', `Track '${input.trackId}' does not exist`);
 
       return prisma.$transaction(async (tx) => {

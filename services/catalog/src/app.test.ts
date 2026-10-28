@@ -225,34 +225,21 @@ describe('Catalog Service Integration Tests', () => {
     });
   });
 
-  describe('resolve (find-or-create)', () => {
-    // These tests create rows; remove them so other tests see only the seeded catalog.
-    const cleanup = async () => {
-      await prisma.album.deleteMany({ where: { title: { equals: 'Resolver Album', mode: 'insensitive' } } });
-      await prisma.artist.deleteMany({ where: { name: { equals: 'Catalog Test Resolver', mode: 'insensitive' } } });
-      await prisma.genre.deleteMany({ where: { slug: 'resolver-genre' } });
-      await cache.catalogChanged();
-    };
-    beforeAll(cleanup);
-    afterAll(cleanup);
+  describe('upload registration endpoint', () => {
+    const valid = { title: 'T', artistName: 'A', genre: 'G', originalFormat: 'flac', rawStorageKey: 'raw/x.flac' };
 
-    it('returns the same artist, genre and album for repeated and differently-cased names', async () => {
-      const a1 = await request(app).post('/artists/resolve').send({ name: 'Catalog Test Resolver' });
-      const a2 = await request(app).post('/artists/resolve').send({ name: 'catalog test resolver' });
-      expect(a1.body.data.id).toBe(a2.body.data.id);
-
-      const g1 = await request(app).post('/genres/resolve').send({ name: 'Resolver Genre' });
-      const g2 = await request(app).post('/genres/resolve').send({ name: 'resolver  genre' });
-      expect(g1.body.data.id).toBe(g2.body.data.id);
-
-      const al1 = await request(app).post('/albums/resolve').send({ title: 'Resolver Album', artistId: a1.body.data.id });
-      const al2 = await request(app).post('/albums/resolve').send({ title: 'RESOLVER ALBUM', artistId: a1.body.data.id });
-      expect(al1.body.data.id).toBe(al2.body.data.id);
+    it('POST /tracks/uploads validates its body at the boundary', async () => {
+      for (const bad of [{}, { ...valid, title: ' ' }, { ...valid, rawStorageKey: '' }, { ...valid, genre: undefined }]) {
+        const res = await request(app).post('/tracks/uploads').send(bad);
+        expect(res.status).toBe(400);
+        expect(res.body.error.code).toBe('VALIDATION_ERROR');
+      }
     });
 
-    it('validates resolve bodies', async () => {
-      expect((await request(app).post('/artists/resolve').send({ name: '  ' })).status).toBe(400);
-      expect((await request(app).post('/albums/resolve').send({ title: 'x' })).status).toBe(400);
+    it('the retired /resolve endpoints are gone', async () => {
+      for (const path of ['/artists/resolve', '/genres/resolve', '/albums/resolve']) {
+        expect((await request(app).post(path).send({ name: 'x' })).status).toBe(404);
+      }
     });
   });
 });

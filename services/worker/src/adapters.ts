@@ -2,7 +2,7 @@ import { GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3
 import { createReadStream, createWriteStream } from 'node:fs';
 import { pipeline } from 'node:stream/promises';
 import type { Readable } from 'node:stream';
-import type { CatalogUpdater, WorkerStorage } from './process-job.js';
+import type { WorkerStorage } from './process-job.js';
 
 export function createS3WorkerStorage(opts: {
   endpoint: string;
@@ -35,21 +35,5 @@ export function createS3WorkerStorage(opts: {
         })
       );
     }
-  };
-}
-
-export function createHttpCatalogUpdater(baseUrl: string): CatalogUpdater {
-  async function patch(trackId: string, body: unknown, correlationId: string): Promise<void> {
-    const res = await fetch(`${baseUrl}/api/tracks/${encodeURIComponent(trackId)}`, {
-      method: 'PATCH',
-      headers: { 'content-type': 'application/json', 'x-correlation-id': correlationId },
-      body: JSON.stringify(body)
-    });
-    if (!res.ok) throw new Error(`Catalog PATCH track ${trackId} failed (${res.status})`);
-  }
-
-  return {
-    markReady: (trackId, payload, cid) => patch(trackId, payload, cid),
-    markFailed: (trackId, cid) => patch(trackId, { status: 'FAILED' }, cid)
   };
 }

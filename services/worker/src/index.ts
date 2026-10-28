@@ -1,7 +1,7 @@
 import amqp from 'amqplib';
 import pino from 'pino';
-import { QUEUES, assertAudioTopology } from '@music/shared';
-import { createHttpCatalogUpdater, createS3WorkerStorage } from './adapters.js';
+import { QUEUES, assertAudioTopology, createHttpCatalogClient } from '@music/shared';
+import { createS3WorkerStorage } from './adapters.js';
 import { config } from './config.js';
 import { createMediaTools } from './ffmpeg.js';
 import { handleDelivery } from './process-job.js';
@@ -12,7 +12,7 @@ async function main() {
   const deps = {
     storage: createS3WorkerStorage(config.minio),
     media: createMediaTools(config.ffmpegPath, config.ffprobePath),
-    catalog: createHttpCatalogUpdater(config.catalogUrl)
+    catalog: createHttpCatalogClient({ baseUrl: config.catalogUrl })
   };
 
   const connection = await amqp.connect(config.rabbitmqUrl);

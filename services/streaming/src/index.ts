@@ -1,4 +1,5 @@
 import pino from 'pino';
+import { createHttpCatalogClient } from '@music/shared';
 import { createApp } from './app.js';
 import { config } from './config.js';
 import { createS3Storage } from './storage.js';
@@ -7,7 +8,7 @@ import { createCatalogResolver } from './track-resolver.js';
 const logger = pino({ name: 'streaming-server' });
 const app = createApp({
   storage: createS3Storage(config.minio),
-  resolver: createCatalogResolver(config.catalogUrl, config.trackCacheTtlMs)
+  resolver: createCatalogResolver(createHttpCatalogClient({ baseUrl: config.catalogUrl }), config.trackCacheTtlMs)
 });
 
 const server = app.listen(config.port, () => {

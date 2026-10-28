@@ -1,10 +1,10 @@
 import type { PrismaClient } from '../generated/client/index.js';
-import type { CatalogClient } from '../catalog-client.js';
+import type { CatalogClient } from '@music/shared';
 import { AppError } from '../http.js';
 
 export function createFavoritesService(prisma: PrismaClient, catalog: CatalogClient) {
   async function assertTrackExists(trackId: string, correlationId?: string) {
-    const found = await catalog.getTracks([trackId], correlationId);
+    const found = await catalog.getTracks([trackId], { correlationId });
     if (found.length === 0) throw new AppError(404, 'TRACK_NOT_FOUND', `Track '${trackId}' does not exist`);
   }
 
@@ -16,7 +16,7 @@ export function createFavoritesService(prisma: PrismaClient, catalog: CatalogCli
 
     async list(userId: string, correlationId?: string) {
       const rows = await prisma.favorite.findMany({ where: { userId }, orderBy: { createdAt: 'desc' } });
-      const tracks = await catalog.getTracks(rows.map((r) => r.trackId), correlationId);
+      const tracks = await catalog.getTracks(rows.map((r) => r.trackId), { correlationId });
       const byId = new Map(tracks.map((t) => [t.id, t]));
       return rows.flatMap((r) => (byId.has(r.trackId) ? [{ favoritedAt: r.createdAt, track: byId.get(r.trackId)! }] : []));
     },

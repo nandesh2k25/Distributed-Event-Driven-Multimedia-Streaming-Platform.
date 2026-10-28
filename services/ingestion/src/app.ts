@@ -6,8 +6,14 @@ import pino from 'pino';
 import { randomUUID } from 'node:crypto';
 import { extname } from 'node:path';
 import type { Readable } from 'node:stream';
-import { AudioUploadMetadataSchema, createErrorResponse, createSuccessResponse } from '@music/shared';
-import type { CatalogClient, JobPublisher, RawAudioStore } from './ports.js';
+import {
+  AudioUploadMetadataSchema,
+  CatalogUnavailableError,
+  createErrorResponse,
+  createSuccessResponse,
+  type CatalogClient
+} from '@music/shared';
+import type { JobPublisher, RawAudioStore } from './ports.js';
 
 export interface IngestionDeps {
   store: RawAudioStore;
@@ -85,20 +91,16 @@ export function createApp({ store, catalog, publisher, maxUploadBytes }: Ingesti
     const format = detectFormat(info.mimeType, info.filename);
     const rawKey = `raw/${randomUUID()}.${format}`;
 
-    const artist = await catalog.resolveArtist(meta.artistName, correlationId);
-    const genre = await catalog.resolveGenre(meta.genre, correlationId);
-    const album = meta.albumTitle ? await catalog.resolveAlbum(meta.albumTitle, artist.id, correlationId) : undefined;
-
-    const track = await catalog.createPlaceholder(
+    const { trackId } = await catalog.registerUpload(
       {
         title: meta.title,
-        artistId: artist.id,
-        albumId: album?.id,
-        genreId: genre.id,
+        artistName: meta.artistName,
+        albumTitle: meta.albumTitle || undefined,
+        genre: meta.genre,
         originalFormat: format,
         rawStorageKey: rawKey
       },
-      correlationId
+      { correlationId }
     );
 
     try {
@@ -107,7 +109,7 @@ export function createApp({ store, catalog, publisher, maxUploadBytes }: Ingesti
         throw new HttpError(413, 'FILE_TOO_LARGE', `File exceeds the ${maxUploadBytes} byte limit`);
       }
       await publisher.publish({
-        trackId: track.id,
+        trackId,
         rawFileKey: rawKey,
         originalFormat: format,
         targetBitrates: [320],
@@ -115,10 +117,10 @@ export function createApp({ store, catalog, publisher, maxUploadBytes }: Ingesti
         timestamp: new Date().toISOString()
       });
     } catch (err) {
-      await catalog.markFailed(track.id, correlationId).catch(() => undefined);
+      await catalog.markTrackFailed(trackId, { correlationId }).catch(() => undefined);
       throw err;
     }
-    return { trackId: track.id };
+    return { trackId };
   }
 
   const uploadHandler = (req: Request, res: Response) => {
@@ -129,6 +131,11 @@ export function createApp({ store, catalog, publisher, maxUploadBytes }: Ingesti
       if (res.headersSent) return;
       if (err instanceof HttpError) {
         res.status(err.status).json(createErrorResponse(err.code, err.message, err.details));
+        return;
+      }
+      if (err instanceof CatalogUnavailableError) {
+        req.log?.error({ err }, 'Catalog unavailable during upload');
+        res.status(502).json(createErrorResponse('CATALOG_UNAVAILABLE', 'The catalog is unavailable, please retry'));
         return;
       }
       req.log?.error({ err }, 'Upload failed');

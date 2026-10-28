@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import request from 'supertest';
 import { Readable } from 'node:stream';
+import { CatalogUnavailableError } from '@music/shared';
 import { createApp } from './app.js';
 import type { ObjectStorage } from './storage.js';
 import type { TrackResolver } from './track-resolver.js';
@@ -79,6 +80,18 @@ describe('streaming service', () => {
     const orphan = await request(app).get('/api/stream/orphan');
     expect(orphan.status).toBe(404);
     expect(orphan.body.error.code).toBe('AUDIO_NOT_FOUND');
+  });
+
+  it('answers 502 CATALOG_UNAVAILABLE when the catalog cannot be reached', async () => {
+    const storage: ObjectStorage = { head: async () => null, getRange: vi.fn() };
+    const resolver: TrackResolver = {
+      resolve: async () => {
+        throw new CatalogUnavailableError('connection refused');
+      }
+    };
+    const res = await request(createApp({ storage, resolver })).get('/api/stream/any');
+    expect(res.status).toBe(502);
+    expect(res.body.error.code).toBe('CATALOG_UNAVAILABLE');
   });
 
   it('answers HEAD without reading the object body', async () => {

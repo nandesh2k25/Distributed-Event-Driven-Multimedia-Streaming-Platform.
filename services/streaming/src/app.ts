@@ -3,7 +3,7 @@ import cors from 'cors';
 import { pinoHttp } from 'pino-http';
 import pino from 'pino';
 import { pipeline } from 'node:stream';
-import { RangeNotSatisfiableError, createErrorResponse, parseRangeHeader } from '@music/shared';
+import { CatalogUnavailableError, RangeNotSatisfiableError, createErrorResponse, parseRangeHeader } from '@music/shared';
 import type { ObjectStorage } from './storage.js';
 import type { TrackResolver } from './track-resolver.js';
 
@@ -91,11 +91,17 @@ export function createApp({ storage, resolver }: StreamingDeps): Express {
   });
 
   app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
-    req.log?.error({ err }, 'Unhandled streaming exception');
     if (res.headersSent) {
+      req.log?.error({ err }, 'Streaming failed mid-response');
       res.destroy();
       return;
     }
+    if (err instanceof CatalogUnavailableError) {
+      req.log?.error({ err }, 'Catalog unavailable while resolving track');
+      res.status(502).json(createErrorResponse('CATALOG_UNAVAILABLE', 'The catalog is unavailable, please retry'));
+      return;
+    }
+    req.log?.error({ err }, 'Unhandled streaming exception');
     res.status(500).json(createErrorResponse('INTERNAL_ERROR', 'Failed to stream audio'));
   });
 

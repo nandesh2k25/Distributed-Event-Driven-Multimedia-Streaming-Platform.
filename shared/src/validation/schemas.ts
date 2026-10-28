@@ -51,13 +51,10 @@ export const AudioUploadMetadataSchema = z.object({
   duration: z.coerce.number().positive().optional()
 });
 
-export const ResolveNameSchema = z.object({
-  name: z.string().trim().min(1, 'Name is required').max(200)
-});
-
-export const ResolveAlbumSchema = z.object({
-  title: z.string().trim().min(1, 'Title is required').max(200),
-  artistId: z.string().trim().min(1, 'artistId is required')
+/** Body of POST /tracks/uploads: registers an upload that is about to be transcoded. */
+export const RegisterUploadSchema = AudioUploadMetadataSchema.omit({ duration: true }).extend({
+  originalFormat: z.string().trim().min(1).max(20),
+  rawStorageKey: z.string().min(1)
 });
 
 /** Fields that may be changed through PATCH /tracks/:id. */
@@ -79,8 +76,9 @@ export const BatchTrackIdsSchema = z.object({
   ids: z.array(z.string().trim().min(1)).min(1, 'Provide at least one id').max(200, 'At most 200 ids per request')
 });
 
+export type RegisterUploadBody = z.infer<typeof RegisterUploadSchema>;
 export type UpdateTrackInput = z.infer<typeof UpdateTrackSchema>;
-export type PaginationQuery= z.infer<typeof PaginationQuerySchema>;
+export type PaginationQuery = z.infer<typeof PaginationQuerySchema>;
 export type TrackQuery = z.infer<typeof TrackQuerySchema>;
 export type CreatePlaylistInput = z.infer<typeof CreatePlaylistSchema>;
 export type UpdatePlaylistInput = z.infer<typeof UpdatePlaylistSchema>;

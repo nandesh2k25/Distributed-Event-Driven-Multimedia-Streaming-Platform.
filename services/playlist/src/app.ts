@@ -5,6 +5,8 @@ import pino from 'pino';
 import { randomUUID } from 'node:crypto';
 import {
   AddTrackToPlaylistSchema,
+  CatalogUnavailableError,
+  type CatalogClient,
   CreatePlaylistSchema,
   ReorderPlaylistTracksSchema,
   UpdatePlaylistSchema,
@@ -12,7 +14,6 @@ import {
   createSuccessResponse
 } from '@music/shared';
 import type { PrismaClient } from './generated/client/index.js';
-import type { CatalogClient } from './catalog-client.js';
 import { AppError, asyncHandler, correlationIdOf, parse, userIdOf } from './http.js';
 import { createFavoritesService } from './services/favorites.service.js';
 import { createPlaylistsService } from './services/playlists.service.js';
@@ -99,6 +100,11 @@ export function createApp({ prisma, catalog }: PlaylistDeps): Express {
   app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
     if (err instanceof AppError) {
       res.status(err.status).json(createErrorResponse(err.code, err.message, err.details));
+      return;
+    }
+    if (err instanceof CatalogUnavailableError) {
+      req.log?.error({ err }, 'Catalog unavailable');
+      res.status(502).json(createErrorResponse('CATALOG_UNAVAILABLE', 'The catalog is unavailable, please retry'));
       return;
     }
     if (err instanceof SyntaxError && 'body' in err) {

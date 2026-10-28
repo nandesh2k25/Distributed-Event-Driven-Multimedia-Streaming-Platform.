@@ -1,6 +1,6 @@
 import pino from 'pino';
+import { createHttpCatalogClient } from '@music/shared';
 import { createApp } from './app.js';
-import { createHttpCatalogClient } from './catalog-client.js';
 import { config } from './config.js';
 import { createRabbitPublisher } from './publisher.js';
 import { createS3RawStore } from './storage.js';
@@ -10,7 +10,7 @@ const publisher = createRabbitPublisher(config.rabbitmqUrl);
 
 const app = createApp({
   store: createS3RawStore(config.minio),
-  catalog: createHttpCatalogClient(config.catalogUrl),
+  catalog: createHttpCatalogClient({ baseUrl: config.catalogUrl }),
   publisher,
   maxUploadBytes: config.maxUploadBytes
 });

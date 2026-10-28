@@ -9,13 +9,13 @@ import { createArtistsService } from './services/artists.service.js';
 import { createAlbumsService } from './services/albums.service.js';
 import { createGenresService } from './services/genres.service.js';
 import { createSearchService } from './services/search.service.js';
-import { createResolveService } from './services/resolve.service.js';
+import { createUploadsService } from './services/uploads.service.js';
 import { createTracksController } from './controllers/tracks.controller.js';
 import { createArtistsController } from './controllers/artists.controller.js';
 import { createAlbumsController } from './controllers/albums.controller.js';
 import { createGenresController } from './controllers/genres.controller.js';
 import { createSearchController } from './controllers/search.controller.js';
-import { createResolveController } from './controllers/resolve.controller.js';
+import { createUploadsController } from './controllers/uploads.controller.js';
 import { createTracksRouter } from './routes/tracks.routes.js';
 import { createArtistsRouter } from './routes/artists.routes.js';
 import { createAlbumsRouter } from './routes/albums.routes.js';
@@ -32,7 +32,7 @@ export function createApp(deps: CatalogDeps): Express {
   const albums = createAlbumsController(createAlbumsService(deps));
   const genres = createGenresController(createGenresService(deps));
   const search = createSearchController(createSearchService(deps));
-  const resolve = createResolveController(createResolveService(deps));
+  const uploads = createUploadsController(createUploadsService(deps));
 
   app.use(cors());
   app.use(express.json());
@@ -55,10 +55,10 @@ export function createApp(deps: CatalogDeps): Express {
 
   // Core router combining all sub-routes
   const apiRouter = express.Router();
-  apiRouter.use('/tracks', createTracksRouter(tracks));
-  apiRouter.use('/artists', createArtistsRouter(artists, resolve));
-  apiRouter.use('/albums', createAlbumsRouter(albums, resolve));
-  apiRouter.use('/genres', createGenresRouter(genres, resolve));
+  apiRouter.use('/tracks', createTracksRouter(tracks, uploads));
+  apiRouter.use('/artists', createArtistsRouter(artists));
+  apiRouter.use('/albums', createAlbumsRouter(albums));
+  apiRouter.use('/genres', createGenresRouter(genres));
   apiRouter.use('/search', createSearchRouter(search));
 
   // Mount at root and prefix paths to support transparent gateway reverse proxying

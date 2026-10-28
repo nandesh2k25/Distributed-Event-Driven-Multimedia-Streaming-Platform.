@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import request from 'supertest';
+import { CatalogUnavailableError, type CatalogClient } from '@music/shared';
+import { createInMemoryCatalog } from '@music/shared/testing';
 import { createApp } from './app.js';
-import type { CatalogClient, JobPublisher, RawAudioStore } from './ports.js';
+import type { JobPublisher, RawAudioStore } from './ports.js';
 
-function setup(overrides: { putError?: Error; maxUploadBytes?: number } = {}) {
+function setup(overrides: { putError?: Error; maxUploadBytes?: number; catalog?: Partial<CatalogClient> } = {}) {
   const stored: { key: string; bytes: number; contentType: string }[] = [];
   const store: RawAudioStore = {
     async put(key, body, contentType) {
@@ -13,16 +15,11 @@ function setup(overrides: { putError?: Error; maxUploadBytes?: number } = {}) {
       stored.push({ key, bytes, contentType });
     }
   };
-  const catalog: CatalogClient = {
-    resolveArtist: vi.fn(async () => ({ id: 'artist-1' })),
-    resolveGenre: vi.fn(async () => ({ id: 'genre-1' })),
-    resolveAlbum: vi.fn(async () => ({ id: 'album-1' })),
-    createPlaceholder: vi.fn(async () => ({ id: 'track-1' })),
-    markFailed: vi.fn(async () => undefined)
-  };
+  const inMemory = createInMemoryCatalog();
+  const catalog: CatalogClient = { ...inMemory, ...overrides.catalog };
   const publisher: JobPublisher = { publish: vi.fn(async () => undefined) };
   const app = createApp({ store, catalog, publisher, maxUploadBytes: overrides.maxUploadBytes ?? 1024 * 1024 });
-  return { app, stored, catalog, publisher };
+  return { app, stored, catalog: inMemory, publisher };
 }
 
 const audio = Buffer.alloc(4096, 1);
@@ -34,33 +31,41 @@ const upload = (app: ReturnType<typeof setup>['app']) =>
     .field('genre', 'Rock');
 
 describe('ingestion service', () => {
-  it('accepts a valid upload: 202, stores raw file, creates PROCESSING placeholder, publishes job', async () => {
+  it('accepts a valid upload: 202, stores raw file, registers a PROCESSING track, publishes job', async () => {
     const { app, stored, catalog, publisher } = setup();
     const res = await upload(app).field('albumTitle', 'Album').attach('file', audio, { filename: 'a.flac', contentType: 'audio/flac' });
 
     expect(res.status).toBe(202);
-    expect(res.body).toEqual({ success: true, data: { trackId: 'track-1', status: 'PROCESSING' } });
+    const { trackId } = res.body.data;
+    expect(res.body).toEqual({ success: true, data: { trackId, status: 'PROCESSING' } });
 
     expect(stored).toHaveLength(1);
     expect(stored[0]!.key).toMatch(/^raw\/.+\.flac$/);
     expect(stored[0]!.bytes).toBe(audio.length);
 
-    expect(catalog.createPlaceholder).toHaveBeenCalledWith(
-      expect.objectContaining({ title: 'Song', artistId: 'artist-1', albumId: 'album-1', genreId: 'genre-1', rawStorageKey: stored[0]!.key }),
-      expect.any(String)
-    );
+    expect(catalog.tracks()).toHaveLength(1);
+    expect(catalog.tracks()[0]).toMatchObject({
+      id: trackId,
+      title: 'Song',
+      status: 'PROCESSING',
+      rawStorageKey: stored[0]!.key,
+      originalFormat: 'flac',
+      artist: { name: 'Artist' },
+      album: { title: 'Album' },
+      genre: { name: 'Rock' }
+    });
     expect(publisher.publish).toHaveBeenCalledWith(
-      expect.objectContaining({ trackId: 'track-1', rawFileKey: stored[0]!.key, originalFormat: 'flac', targetBitrates: [320] })
+      expect.objectContaining({ trackId, rawFileKey: stored[0]!.key, originalFormat: 'flac', targetBitrates: [320] })
     );
   });
 
-  it('rejects non-audio files with 400 INVALID_FILE_TYPE and creates nothing', async () => {
+  it('rejects non-audio files with 400 INVALID_FILE_TYPE and registers nothing', async () => {
     const { app, catalog, publisher } = setup();
     const res = await upload(app).attach('file', Buffer.from('hello'), { filename: 'notes.txt', contentType: 'text/plain' });
 
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe('INVALID_FILE_TYPE');
-    expect(catalog.createPlaceholder).not.toHaveBeenCalled();
+    expect(catalog.tracks()).toEqual([]);
     expect(publisher.publish).not.toHaveBeenCalled();
   });
 
@@ -73,11 +78,12 @@ describe('ingestion service', () => {
   });
 
   it('rejects missing metadata with field-level details', async () => {
-    const { app } = setup();
+    const { app, catalog } = setup();
     const res = await request(app).post('/api/ingest/upload').field('title', 'Song').attach('file', audio, { filename: 'a.mp3', contentType: 'audio/mpeg' });
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe('VALIDATION_ERROR');
     expect(res.body.error.details.map((d: { field: string }) => d.field)).toEqual(expect.arrayContaining(['artistName', 'genre']));
+    expect(catalog.tracks()).toEqual([]);
   });
 
   it('requires a file and multipart content', async () => {
@@ -93,7 +99,7 @@ describe('ingestion service', () => {
     const res = await upload(app).attach('file', audio, { filename: 'a.mp3', contentType: 'audio/mpeg' });
 
     expect(res.status).toBe(500);
-    expect(catalog.markFailed).toHaveBeenCalledWith('track-1', expect.any(String));
+    expect(catalog.tracks().map((t) => t.status)).toEqual(['FAILED']);
     expect(publisher.publish).not.toHaveBeenCalled();
   });
 
@@ -102,7 +108,23 @@ describe('ingestion service', () => {
     const res = await upload(app).attach('file', audio, { filename: 'a.mp3', contentType: 'audio/mpeg' });
 
     expect(res.status).toBe(413);
-    expect(catalog.markFailed).toHaveBeenCalled();
+    expect(catalog.tracks().map((t) => t.status)).toEqual(['FAILED']);
+    expect(publisher.publish).not.toHaveBeenCalled();
+  });
+
+  it('answers 502 CATALOG_UNAVAILABLE, without storing the file, when the catalog cannot be reached', async () => {
+    const { app, stored, publisher } = setup({
+      catalog: {
+        registerUpload: async () => {
+          throw new CatalogUnavailableError('connection refused');
+        }
+      }
+    });
+    const res = await upload(app).attach('file', audio, { filename: 'a.mp3', contentType: 'audio/mpeg' });
+
+    expect(res.status).toBe(502);
+    expect(res.body.error.code).toBe('CATALOG_UNAVAILABLE');
+    expect(stored).toEqual([]);
     expect(publisher.publish).not.toHaveBeenCalled();
   });
 });

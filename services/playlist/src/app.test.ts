@@ -3,14 +3,11 @@ import request from 'supertest';
 import { randomUUID } from 'node:crypto';
 import { createApp } from './app.js';
 import { prisma } from './lib/prisma.js';
-import type { CatalogClient } from './catalog-client.js';
+import { createInMemoryCatalog } from '@music/shared/testing';
 
 const KNOWN = ['t1', 't2', 't3', 't4'];
-const catalog: CatalogClient = {
-  async getTracks(ids) {
-    return ids.filter((id) => KNOWN.includes(id)).map((id) => ({ id, title: `Title ${id}` }));
-  }
-};
+const catalog = createInMemoryCatalog();
+for (const id of KNOWN) catalog.addTrack({ id, title: `Title ${id}` });
 const app = createApp({ prisma, catalog });
 
 const users = new Set<string>();

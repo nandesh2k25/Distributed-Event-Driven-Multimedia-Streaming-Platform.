@@ -1,7 +1,7 @@
 import { mkdtemp, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { AudioTranscodeJob, BitrateVariant } from '@music/shared';
+import type { AudioTranscodeJob, CatalogClient } from '@music/shared';
 import type { MediaTools } from './ffmpeg.js';
 
 export interface WorkerStorage {
@@ -9,25 +9,11 @@ export interface WorkerStorage {
   upload(key: string, filePath: string, contentType: string, size: number): Promise<void>;
 }
 
-export interface ReadyPayload {
-  status: 'READY';
-  duration: number;
-  waveformPeaks: number[];
-  storageKey: string;
-  bitrate: number;
-  format: string;
-  variants: BitrateVariant[];
-}
-
-export interface CatalogUpdater {
-  markReady(trackId: string, payload: ReadyPayload, correlationId: string): Promise<void>;
-  markFailed(trackId: string, correlationId: string): Promise<void>;
-}
-
 export interface WorkerDeps {
   storage: WorkerStorage;
   media: MediaTools;
-  catalog: CatalogUpdater;
+  /** The worker only reports results, so it needs just these two operations. */
+  catalog: Pick<CatalogClient, 'markTrackReady' | 'markTrackFailed'>;
 }
 
 const TARGET_BITRATE = 320;
@@ -49,10 +35,9 @@ export async function processJob(job: AudioTranscodeJob, { storage, media, catal
     const { size } = await stat(output);
     await storage.upload(storageKey, output, 'audio/mpeg', size);
 
-    await catalog.markReady(
+    await catalog.markTrackReady(
       job.trackId,
       {
-        status: 'READY',
         duration,
         waveformPeaks,
         storageKey,
@@ -60,7 +45,7 @@ export async function processJob(job: AudioTranscodeJob, { storage, media, catal
         format: 'mp3',
         variants: [{ bitrate: TARGET_BITRATE, codec: 'mp3', s3Key: storageKey, fileSize: size }]
       },
-      job.correlationId
+      { correlationId: job.correlationId }
     );
   } finally {
     await rm(dir, { recursive: true, force: true });
@@ -93,7 +78,7 @@ export async function handleDelivery(
     return 'ack';
   } catch (err) {
     log.error({ err, trackId: job.trackId, correlationId: job.correlationId }, 'Transcode failed; dead-lettering');
-    await deps.catalog.markFailed(job.trackId, job.correlationId).catch(() => undefined);
+    await deps.catalog.markTrackFailed(job.trackId, { correlationId: job.correlationId }).catch(() => undefined);
     return 'reject';
   }
 }
