@@ -68,6 +68,7 @@ model Track {
   variants       Json        @default("[]")
   status         TrackStatus @default(PENDING)
   playCount      Int         @default(0)
+  isFree         Boolean     @default(true)
   trackNumber    Int?
   artistId       String
   artist         Artist      @relation(fields: [artistId], references: [id], onDelete: Restrict)

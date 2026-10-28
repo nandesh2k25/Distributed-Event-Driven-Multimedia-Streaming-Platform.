@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { Track } from '../lib/api';
+import { getToken } from '../lib/session';
 
 export type BufferedRange = [start: number, end: number];
 
@@ -28,7 +29,11 @@ interface AudioPlayerActions {
 
 const AudioPlayerContext = createContext<(AudioPlayerState & AudioPlayerActions) | null>(null);
 
-export const streamUrl = (trackId: string) => `/api/stream/${trackId}`;
+/** An <audio> element cannot send headers, so a signed-in user's token rides in the URL. */
+export function streamUrl(trackId: string) {
+  const token = getToken();
+  return `/api/stream/${trackId}${token ? `?access_token=${encodeURIComponent(token)}` : ''}`;
+}
 
 function readBuffered(audio: HTMLAudioElement): BufferedRange[] {
   const ranges: BufferedRange[] = [];

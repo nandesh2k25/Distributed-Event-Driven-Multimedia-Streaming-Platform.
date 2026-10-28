@@ -9,7 +9,7 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgrespassword
       POSTGRES_DB: music_catalog
-      POSTGRES_MULTIPLE_DATABASES: music_catalog,music_playlist
+      POSTGRES_MULTIPLE_DATABASES: music_catalog,music_playlist,music_auth
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./scripts/init-postgres.sh:/docker-entrypoint-initdb.d/init-postgres.sh:ro

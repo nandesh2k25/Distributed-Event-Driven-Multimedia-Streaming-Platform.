@@ -18,7 +18,7 @@ function setup(ttlMs = 60_000) {
 describe('catalog track resolver', () => {
   it('returns the storage key only for READY tracks that have one', async () => {
     const { resolver } = setup();
-    expect(await resolver.resolve('ready')).toBe('processed/ready.mp3');
+    expect(await resolver.resolve('ready')).toEqual({ storageKey: 'processed/ready.mp3', isFree: true });
     expect(await resolver.resolve('processing')).toBeNull();
     expect(await resolver.resolve('no-key')).toBeNull();
     expect(await resolver.resolve('missing')).toBeNull();
@@ -43,7 +43,7 @@ describe('catalog track resolver', () => {
     expect(await resolver.resolve('processing')).toBeNull(); // still the cached answer
 
     advance(60_001);
-    expect(await resolver.resolve('processing')).toBe('processed/p.mp3');
+    expect(await resolver.resolve('processing')).toMatchObject({ storageKey: 'processed/p.mp3' });
   });
 
   it('does not cache a catalog outage and lets the error through', async () => {
@@ -51,6 +51,12 @@ describe('catalog track resolver', () => {
     const resolver = createCatalogResolver({ getTrack: unavailable } as unknown as CatalogClient, 60_000);
 
     await expect(resolver.resolve('t')).rejects.toBeInstanceOf(CatalogUnavailableError);
-    expect(await resolver.resolve('t')).toBe('k');
+    expect(await resolver.resolve('t')).toEqual({ storageKey: 'k', isFree: true });
+  });
+
+  it('reports a track as premium only when the catalog says isFree is false', async () => {
+    const { resolver, catalog } = setup();
+    catalog.addTrack({ id: 'premium', status: 'READY', storageKey: 'processed/premium.mp3', isFree: false });
+    expect((await resolver.resolve('premium'))?.isFree).toBe(false);
   });
 });

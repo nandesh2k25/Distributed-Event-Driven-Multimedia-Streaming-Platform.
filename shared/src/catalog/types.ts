@@ -9,6 +9,8 @@ export interface CatalogTrack {
   title: string;
   status: 'PENDING' | 'PROCESSING' | 'READY' | 'FAILED';
   duration: number;
+  /** Guests may stream free tracks only. Absent is treated as free. */
+  isFree?: boolean;
   storageKey?: string | null;
   rawStorageKey?: string | null;
   [field: string]: unknown;

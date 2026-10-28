@@ -1,3 +1,5 @@
+import { authHeaders } from './session';
+
 export interface UploadMetadata {
   title: string;
   artistName: string;
@@ -30,6 +32,7 @@ export function uploadTrack(
 
     const xhr = new XMLHttpRequest();
     xhr.open('POST', '/api/ingest/upload');
+    for (const [name, value] of Object.entries(authHeaders())) xhr.setRequestHeader(name, value);
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable) onProgress(e.loaded / e.total);
     };

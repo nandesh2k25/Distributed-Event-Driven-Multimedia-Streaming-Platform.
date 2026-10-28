@@ -1,3 +1,4 @@
+import { authHeaders, clearSession, type SessionUser } from './session';
 export interface Genre { id: string; name: string; slug: string }
 export interface Artist {
   id: string; name: string; bio?: string | null; avatarUrl?: string | null;
@@ -10,11 +11,15 @@ export interface Album {
 export interface Track {
   id: string; title: string; duration: number; status: string; trackNumber?: number | null;
   artist?: Artist; album?: Album | null; genre?: Genre | string | null; waveformPeaks?: number[];
+  /** Guests can only play free tracks. */
+  isFree?: boolean;
 }
 export interface Meta { page?: number; limit?: number; total?: number; totalPages?: number }
 export interface SearchResults { tracks: Track[]; artists: Artist[]; albums: Album[]; query: string }
 
-interface Envelope<T> { success: boolean; data: T; meta?: Meta; error?: { message: string } }
+interface Envelope<T> { success: boolean; data: T; meta?: Meta; error?: { code?: string; message: string } }
+
+export interface AuthResult { token: string; user: SessionUser }
 
 export interface Playlist {
   id: string; title: string; description?: string | null; isPublic: boolean;
@@ -33,12 +38,14 @@ async function request<T>(
   const res = await fetch(`/api${path}`, {
     method,
     signal,
-    headers: body === undefined ? undefined : { 'content-type': 'application/json' },
+    headers: { ...(body === undefined ? {} : { 'content-type': 'application/json' }), ...authHeaders() },
     body: body === undefined ? undefined : JSON.stringify(body)
   });
   if (res.status === 204) return { data: undefined as T };
   const parsed = (await res.json().catch(() => null)) as Envelope<T> | null;
   if (!res.ok || !parsed?.success) {
+    // The gateway rejected our token (expired or forged): drop it so the UI falls back to guest.
+    if (parsed?.error?.code === 'TOKEN_INVALID') clearSession();
     throw new Error(parsed?.error?.message ?? `Request failed (${res.status})`);
   }
   return { data: parsed.data, meta: parsed.meta };
@@ -47,6 +54,11 @@ async function request<T>(
 const get = <T>(path: string, signal?: AbortSignal) => request<T>('GET', path, undefined, signal);
 
 export const api = {
+  signup: (input: { email: string; password: string; displayName: string }) =>
+    request<AuthResult>('POST', '/auth/signup', input),
+  login: (input: { email: string; password: string }) => request<AuthResult>('POST', '/auth/login', input),
+  me: (signal?: AbortSignal) => get<{ user: SessionUser }>('/auth/me', signal),
+
   tracks: (params = '', signal?: AbortSignal) => get<Track[]>(`/tracks${params}`, signal),
   track: (id: string, signal?: AbortSignal) => get<Track>(`/tracks/${id}`, signal),
   artists: (signal?: AbortSignal) => get<Artist[]>('/artists', signal),

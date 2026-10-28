@@ -1,9 +1,13 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { AuthProvider } from './AuthContext';
 import { FavoritesProvider } from './FavoritesContext';
+import { clearSession, setSession } from '../lib/session';
 import { HeartButton } from '../components/HeartButton';
 
 const json = (status: number, body: unknown) => Promise.resolve(new Response(JSON.stringify(body), { status }));
+const user = { id: 'u1', email: 'a@b.co', displayName: 'Ada' };
 
 describe('favorites (optimistic UI)', () => {
   let fetchMock: ReturnType<typeof vi.fn<any[], any>>;
@@ -11,7 +15,9 @@ describe('favorites (optimistic UI)', () => {
 
   beforeEach(() => {
     mutation = null;
+    setSession({ token: 'tok', user });
     fetchMock = vi.fn((url: string, init?: RequestInit) => {
+      if (url.endsWith('/auth/me')) return json(200, { success: true, data: { user } });
       if (url.endsWith('/favorites/ids')) return json(200, { success: true, data: ['t2'] });
       // hold PUT/DELETE open so the test can look at the UI while the request is in flight
       return new Promise<Response>((resolve) => {
@@ -23,15 +29,37 @@ describe('favorites (optimistic UI)', () => {
   });
   afterEach(() => {
     vi.unstubAllGlobals();
+    clearSession();
   });
 
   const renderHearts = () =>
     render(
-      <FavoritesProvider>
-        <HeartButton trackId="t1" title="One" />
-        <HeartButton trackId="t2" title="Two" />
-      </FavoritesProvider>
+      <MemoryRouter initialEntries={['/']}>
+        <AuthProvider>
+          <Routes>
+            <Route
+              path="/"
+              element={
+                <FavoritesProvider>
+                  <HeartButton trackId="t1" title="One" />
+                  <HeartButton trackId="t2" title="Two" />
+                </FavoritesProvider>
+              }
+            />
+            <Route path="/login" element={<p>login page</p>} />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>
     );
+
+  it('sends a guest to the login page instead of saving a favorite', async () => {
+    clearSession();
+    renderHearts();
+    fireEvent.click(screen.getByRole('button', { name: /One/ }));
+
+    expect(await screen.findByText('login page')).toBeTruthy();
+    expect(fetchMock).not.toHaveBeenCalledWith('/api/favorites/t1', expect.anything());
+  });
 
   it('loads existing favorites', async () => {
     renderHearts();

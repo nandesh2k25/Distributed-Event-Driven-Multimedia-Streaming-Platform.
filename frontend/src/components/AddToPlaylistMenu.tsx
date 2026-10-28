@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ListPlus } from 'lucide-react';
+import { useRequireLogin } from '../context/AuthContext';
 import { api, type Playlist } from '../lib/api';
 
 export function AddToPlaylistMenu({ trackId, title }: { trackId: string; title: string }) {
+  const requireLogin = useRequireLogin();
   const [open, setOpen] = useState(false);
   const [playlists, setPlaylists] = useState<Playlist[] | null>(null);
   const [message, setMessage] = useState<{ text: string; ok: boolean } | null>(null);
@@ -42,7 +44,7 @@ export function AddToPlaylistMenu({ trackId, title }: { trackId: string; title: 
   return (
     <div ref={root} className="relative shrink-0">
       <button
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => requireLogin(() => setOpen((o) => !o), 'Sign in to build playlists.')}
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label={`Add to playlist: ${title}`}

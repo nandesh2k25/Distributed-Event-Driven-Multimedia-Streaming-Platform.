@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { createProxyMiddleware } from 'http-proxy-middleware';
 import { config } from '../config.js';
+import { requireLogin } from '../auth/authenticate.js';
 import { CORRELATION_ID_HEADER } from '../middleware/correlation-id.js';
 import { createErrorResponse } from '@music/shared';
 
@@ -41,6 +42,9 @@ function createServiceProxy(targetUrl: string, pathPrefix: string) {
 }
 
 // Mount microservice proxies
+// Auth Service: /api/auth (public: signup, login, session check)
+proxyRouter.use('/auth', createServiceProxy(config.services.auth, '/api/auth'));
+
 // Catalog Service: /api/catalog, /api/albums, /api/artists, /api/tracks, /api/genres, /api/search
 proxyRouter.use('/catalog', createServiceProxy(config.services.catalog, '/api/catalog'));
 proxyRouter.use('/albums', createServiceProxy(config.services.catalog, '/api/albums'));
@@ -49,12 +53,12 @@ proxyRouter.use('/tracks', createServiceProxy(config.services.catalog, '/api/tra
 proxyRouter.use('/genres', createServiceProxy(config.services.catalog, '/api/genres'));
 proxyRouter.use('/search', createServiceProxy(config.services.catalog, '/api/search'));
 
-// Playlist Service: /api/playlists, /api/favorites
-proxyRouter.use('/playlists', createServiceProxy(config.services.playlist, '/api/playlists'));
-proxyRouter.use('/favorites', createServiceProxy(config.services.playlist, '/api/favorites'));
+// Playlist Service: /api/playlists, /api/favorites (signed-in users only)
+proxyRouter.use('/playlists', requireLogin, createServiceProxy(config.services.playlist, '/api/playlists'));
+proxyRouter.use('/favorites', requireLogin, createServiceProxy(config.services.playlist, '/api/favorites'));
 
-// Ingestion Service: /api/ingest
-proxyRouter.use('/ingest', createServiceProxy(config.services.ingestion, '/api/ingest'));
+// Ingestion Service: /api/ingest (signed-in users only)
+proxyRouter.use('/ingest', requireLogin, createServiceProxy(config.services.ingestion, '/api/ingest'));
 
 // Streaming Service: /api/stream
 proxyRouter.use('/stream', createServiceProxy(config.services.streaming, '/api/stream'));

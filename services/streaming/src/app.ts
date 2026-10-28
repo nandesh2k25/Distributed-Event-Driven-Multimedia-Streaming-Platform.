@@ -33,11 +33,18 @@ export function createApp({ storage, resolver }: StreamingDeps): Express {
       const trackId = req.params.trackId as string;
       const correlationId = req.headers['x-correlation-id'] as string | undefined;
 
-      const key = await resolver.resolve(trackId, correlationId);
-      if (!key) {
+      const track = await resolver.resolve(trackId, correlationId);
+      if (!track) {
         res.status(404).json(createErrorResponse('TRACK_NOT_FOUND', `Track '${trackId}' is not available`));
         return;
       }
+
+      // The gateway sets X-User-Id only for a verified token, so its absence means a guest.
+      if (!track.isFree && !req.header('x-user-id')) {
+        res.status(401).json(createErrorResponse('LOGIN_REQUIRED', 'Sign in to play this track'));
+        return;
+      }
+      const key = track.storageKey;
 
       const meta = await storage.head(key);
       if (!meta) {

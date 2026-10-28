@@ -314,6 +314,8 @@ async function main() {
       ],
       status: TrackStatus.READY,
       trackNumber: t.trackNumber,
+      // The last third of the catalog is premium so guests see both kinds.
+      isFree: tracksData.indexOf(t) < 8,
       playCount: Math.floor(Math.random() * 500) + 50,
       artistId: artist.id,
       albumId: album?.id || null,

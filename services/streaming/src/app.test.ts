@@ -17,7 +17,14 @@ function setup() {
     getRange
   };
   const resolver: TrackResolver = {
-    resolve: async (id) => (id === 'ready' ? 'processed/a.mp3' : id === 'orphan' ? 'processed/missing.mp3' : null)
+    resolve: async (id) =>
+      id === 'ready'
+        ? { storageKey: 'processed/a.mp3', isFree: true }
+        : id === 'premium'
+          ? { storageKey: 'processed/a.mp3', isFree: false }
+          : id === 'orphan'
+            ? { storageKey: 'processed/missing.mp3', isFree: true }
+            : null
   };
   return { app: createApp({ storage, resolver }), getRange };
 }
@@ -80,6 +87,23 @@ describe('streaming service', () => {
     const orphan = await request(app).get('/api/stream/orphan');
     expect(orphan.status).toBe(404);
     expect(orphan.body.error.code).toBe('AUDIO_NOT_FOUND');
+  });
+
+  it('keeps premium tracks from guests but streams them to signed-in users', async () => {
+    const { app, getRange } = setup();
+
+    const guest = await request(app).get('/api/stream/premium');
+    expect(guest.status).toBe(401);
+    expect(guest.body.error.code).toBe('LOGIN_REQUIRED');
+    expect(getRange).not.toHaveBeenCalled();
+
+    const member = await request(app).get('/api/stream/premium').set('X-User-Id', 'user-1');
+    expect(member.status).toBe(200);
+  });
+
+  it('streams free tracks to guests', async () => {
+    const { app } = setup();
+    expect((await request(app).get('/api/stream/ready')).status).toBe(200);
   });
 
   it('answers 502 CATALOG_UNAVAILABLE when the catalog cannot be reached', async () => {

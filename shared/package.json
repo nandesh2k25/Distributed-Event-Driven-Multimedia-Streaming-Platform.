@@ -5,8 +5,14 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
-    ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" },
-    "./testing": { "types": "./dist/testing.d.ts", "default": "./dist/testing.js" }
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./testing": {
+      "types": "./dist/testing.d.ts",
+      "default": "./dist/testing.js"
+    }
   },
   "scripts": {
     "build": "tsc",
@@ -14,9 +20,11 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "jsonwebtoken": "^9.0.3",
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^20.12.7",
     "typescript": "^5.4.5",
     "vitest": "^1.6.0"

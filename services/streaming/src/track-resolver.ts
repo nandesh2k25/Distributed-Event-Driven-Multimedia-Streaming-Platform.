@@ -1,12 +1,17 @@
 import type { CatalogClient } from '@music/shared';
 
+export interface PlayableTrack {
+  storageKey: string;
+  isFree: boolean;
+}
+
 export interface TrackResolver {
-  /** Returns the storage key of a playable track, or null if unknown / not ready. */
-  resolve(trackId: string, correlationId?: string): Promise<string | null>;
+  /** Returns what is needed to serve a playable track, or null if unknown / not ready. */
+  resolve(trackId: string, correlationId?: string): Promise<PlayableTrack | null>;
 }
 
 interface CacheEntry {
-  key: string | null;
+  track: PlayableTrack | null;
   expiresAt: number;
 }
 
@@ -21,12 +26,15 @@ export function createCatalogResolver(catalog: CatalogClient, ttlMs: number, now
   return {
     async resolve(trackId, correlationId) {
       const hit = cache.get(trackId);
-      if (hit && hit.expiresAt > now()) return hit.key;
+      if (hit && hit.expiresAt > now()) return hit.track;
 
       const track = await catalog.getTrack(trackId, { correlationId });
-      const key = track && track.status === 'READY' && track.storageKey ? track.storageKey : null;
-      cache.set(trackId, { key, expiresAt: now() + ttlMs });
-      return key;
+      const playable =
+        track && track.status === 'READY' && track.storageKey
+          ? { storageKey: track.storageKey, isFree: track.isFree !== false }
+          : null;
+      cache.set(trackId, { track: playable, expiresAt: now() + ttlMs });
+      return playable;
     }
   };
 }

@@ -1,0 +1,21 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Generated outside @prisma/client for the same reason as the Playlist Service: pnpm shares
+// node_modules/.prisma between packages, and each service has its own schema.
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/client"
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  displayName  String
+  passwordHash String
+  createdAt    DateTime @default(now())
+
+  @@map("users")
+}

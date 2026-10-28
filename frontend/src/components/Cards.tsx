@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
-import { Disc3, Pause, Play, User } from 'lucide-react';
+import { Disc3, Lock, Pause, Play, User } from 'lucide-react';
 import { useAudioPlayer } from '../context/AudioPlayerContext';
+import { useAuth, useRequireLogin } from '../context/AuthContext';
 import { AddToPlaylistMenu } from './AddToPlaylistMenu';
 import { HeartButton } from './HeartButton';
 import { type Album, type Artist, type Track, formatDuration } from '../lib/api';
@@ -55,6 +56,9 @@ export function TrackRow({ track, index, queue, trailing, hidePlaylistMenu, liPr
   const player = useAudioPlayer();
   const isCurrent = player.currentTrack?.id === track.id;
   const isPlaying = isCurrent && player.isPlaying;
+  const { isSignedIn } = useAuth();
+  const requireLogin = useRequireLogin();
+  const locked = track.isFree === false && !isSignedIn;
 
   return (
     <li
@@ -62,14 +66,26 @@ export function TrackRow({ track, index, queue, trailing, hidePlaylistMenu, liPr
       className={`group flex items-center gap-4 rounded-md px-3 py-2 hover:bg-zinc-800 ${isCurrent ? 'bg-zinc-800/60' : ''} ${liProps?.className ?? ''}`}
     >
       <button
-        onClick={() => (isCurrent ? player.togglePlay() : player.playTrack(track, queue))}
-        aria-label={`${isPlaying ? 'Pause' : 'Play'} ${track.title}`}
+        onClick={() =>
+          locked
+            ? requireLogin(() => undefined, 'Sign in to play premium tracks.')
+            : isCurrent
+              ? player.togglePlay()
+              : player.playTrack(track, queue)
+        }
+        aria-label={locked ? `Sign in to play ${track.title}` : `${isPlaying ? 'Pause' : 'Play'} ${track.title}`}
         className="flex h-6 w-6 items-center justify-center text-sm text-zinc-500"
       >
-        <span className={isCurrent ? 'hidden' : 'group-hover:hidden'}>{index ?? ''}</span>
-        <span className={isCurrent ? 'text-accent' : 'hidden text-white group-hover:inline'}>
-          {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-        </span>
+        {locked ? (
+          <Lock className="h-4 w-4 text-amber-400" />
+        ) : (
+          <>
+            <span className={isCurrent ? 'hidden' : 'group-hover:hidden'}>{index ?? ''}</span>
+            <span className={isCurrent ? 'text-accent' : 'hidden text-white group-hover:inline'}>
+              {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+            </span>
+          </>
+        )}
       </button>
       <div className="min-w-0 flex-1">
         <p className="truncate font-medium">{track.title}</p>
@@ -89,6 +105,9 @@ export function TrackRow({ track, index, queue, trailing, hidePlaylistMenu, liPr
           )}
         </p>
       </div>
+      {track.isFree === false && (
+        <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-xs text-amber-300">Premium</span>
+      )}
       {track.genre && (
         <span className="hidden rounded-full bg-zinc-800 px-2 py-0.5 text-xs text-zinc-300 sm:inline">
           {typeof track.genre === 'string' ? track.genre : track.genre.name}

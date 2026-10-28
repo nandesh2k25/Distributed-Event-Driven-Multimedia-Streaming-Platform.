@@ -16,6 +16,8 @@ export const config = {
     host: process.env.REDIS_HOST || 'localhost',
     port: parseInt(process.env.REDIS_PORT || '6379', 10)
   },
+  // Must match the Auth Service, which signs the tokens. The default is for local development only.
+  jwtSecret: process.env.JWT_SECRET || 'dev-only-secret-change-me',
   rateLimit: {
     requestsPerMinute: parseInt(process.env.RATE_LIMIT_PER_MINUTE || '300', 10),
     windowMs: 60_000
@@ -32,6 +34,7 @@ export const config = {
 
   // Downstream microservices
   services: {
+    auth: process.env.AUTH_SERVICE_URL || 'http://localhost:3005',
     catalog: process.env.CATALOG_SERVICE_URL || 'http://localhost:3001',
     playlist: process.env.PLAYLIST_SERVICE_URL || 'http://localhost:3002',
     ingestion: process.env.INGESTION_SERVICE_URL || 'http://localhost:3003',

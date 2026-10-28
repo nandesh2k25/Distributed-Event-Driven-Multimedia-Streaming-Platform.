@@ -6,6 +6,7 @@ import { correlationIdMiddleware } from './middleware/correlation-id.js';
 import { errorHandler, notFoundHandler } from './middleware/error-handler.js';
 import { healthRouter } from './routes/health.js';
 import { proxyRouter } from './routes/proxy.js';
+import { authenticate } from './auth/authenticate.js';
 import { createMemoryRateLimiter } from './rate-limit/memory-rate-limiter.js';
 import { rateLimitMiddleware } from './rate-limit/rate-limit.middleware.js';
 import type { RateLimiter } from './rate-limit/rate-limiter.js';
@@ -51,6 +52,7 @@ export function createApp({ rateLimiter = createMemoryRateLimiter() }: AppDeps =
       limit: config.rateLimit.requestsPerMinute,
       windowMs: config.rateLimit.windowMs
     }),
+    authenticate(config.jwtSecret),
     proxyRouter
   );
 
