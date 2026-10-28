@@ -15,6 +15,8 @@ For a detailed breakdown of the system architecture, microservices design, and M
 | **Redis 7** | `6379` | In-memory distributed caching & gateway rate limiting |
 | **RabbitMQ 3** | `5672` / `15672` | AMQP message broker for asynchronous media transcoding jobs & web management dashboard |
 | **MinIO S3** | `9000` / `9001` | High-performance S3-compatible object storage (`raw-audio` and `processed-audio` buckets) & console UI |
+| **Catalog Service** | `3001` | Prisma/PostgreSQL catalog (artists, albums, tracks, genres), search, Redis-cached listings |
+| **Frontend** | `5173` | React 19 + Vite + Tailwind SPA (browse and live search) |
 | **Shared Contracts** | N/A | `@music/shared` monorepo package exporting domain models, events, range utils, and Zod schemas |
 
 ---
@@ -62,35 +64,58 @@ To verify all containers are healthy:
 docker compose ps
 ```
 
-### 4. Build Workspace Packages
+### 4. Configure the Catalog Service
 
-Compile TypeScript packages across the monorepo:
+Prisma reads its connection string from `services/catalog/.env` (gitignored). Create it with the local defaults that match `docker-compose.yml`:
+
+```env
+DATABASE_URL="postgresql://postgres:postgrespassword@localhost:5432/music_catalog?schema=public"
+REDIS_URL="redis://localhost:6379"
+PORT=3001
+NODE_ENV=development
+```
+
+### 5. Build Workspace Packages
+
+Compile the shared package first (the services import its compiled output), then everything else:
 
 ```bash
 pnpm build
 ```
 
-### 5. Run the Automated Test Suite
+### 6. Set Up the Catalog Database
 
-Run unit and integration tests across all packages:
+Apply the Prisma migrations and load the sample artists, albums and tracks (the seed is idempotent):
+
+```bash
+pnpm --filter @music/catalog exec prisma generate
+pnpm --filter @music/catalog exec prisma migrate deploy
+pnpm seed
+```
+
+### 7. Run the Automated Test Suite
+
+Catalog tests run against the live PostgreSQL and Redis containers, so complete steps 3 and 6 first:
 
 ```bash
 pnpm test
 ```
 
-### 6. Start the API Gateway
+### 8. Start the Services
 
-Start the API Gateway in development mode with hot reload:
-
-```bash
-pnpm --filter @music/gateway dev
-```
-
-Or run the compiled production build:
+Run each in its own terminal. Dev mode gives hot reload:
 
 ```bash
-pnpm --filter @music/gateway start
+pnpm --filter @music/catalog dev    # Catalog Service  -> http://localhost:3001
+pnpm --filter @music/gateway dev    # API Gateway      -> http://localhost:8080
+pnpm --filter @music/frontend dev   # React frontend   -> http://localhost:5173
 ```
+
+Or run the compiled builds with `pnpm --filter <package> start` (`@music/catalog`, `@music/gateway`). The frontend dev server proxies `/api/*` to the gateway; set `GATEWAY_URL` to point it elsewhere.
+
+Open **http://localhost:5173** to browse the catalog and use the live search.
+
+> **Note:** The Playlist, Ingestion and Streaming services are not implemented yet (tickets 03-05). Their gateway routes return `503` until they exist.
 
 ---
 
@@ -123,6 +148,19 @@ Expected response:
 }
 ```
 
+### Catalog API (through the Gateway)
+
+```bash
+curl "http://localhost:8080/api/tracks?limit=5"
+curl "http://localhost:8080/api/tracks?genre=synthwave"
+curl "http://localhost:8080/api/search?q=mirage"
+curl http://localhost:8080/api/artists
+curl http://localhost:8080/api/albums
+curl http://localhost:8080/api/genres
+```
+
+`/api/catalog/*` is also routed to the Catalog Service. All responses use the `{ success, data, meta }` envelope.
+
 ### Correlation ID Verification
 
 The API Gateway automatically generates a UUIDv4 `X-Correlation-ID` header if one is not provided, or preserves and propagates incoming client correlation IDs:
@@ -150,6 +188,7 @@ curl -i -H "X-Correlation-ID: 9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d" http://local
 ├── .Agent/             # Agent and workflow rules (untracked)
 ├── docs/               # System architecture & sequence specifications
 │   └── description.md
+├── frontend/           # React + Vite + Tailwind SPA
 ├── gateway/            # Express ingress reverse proxy & health aggregator
 ├── scripts/            # Infrastructure bootstrap & database init scripts
 ├── services/           # Backend microservices (Catalog, Playlist, Ingestion, Streaming)

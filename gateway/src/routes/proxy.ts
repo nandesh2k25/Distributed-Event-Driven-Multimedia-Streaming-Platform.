@@ -11,6 +11,8 @@ function createServiceProxy(targetUrl: string, pathPrefix: string) {
     target: targetUrl,
     changeOrigin: true,
     ws: false,
+    // Express strips the mount path from req.url; restore it so downstream services see /api/<resource>
+    pathRewrite: (path) => `${pathPrefix}${path}`,
     on: {
       proxyReq: (proxyReq, req) => {
         const correlationId = (req as Request).correlationId;
@@ -39,11 +41,13 @@ function createServiceProxy(targetUrl: string, pathPrefix: string) {
 }
 
 // Mount microservice proxies
-// Catalog Service: /api/catalog, /api/albums, /api/artists, /api/tracks
+// Catalog Service: /api/catalog, /api/albums, /api/artists, /api/tracks, /api/genres, /api/search
 proxyRouter.use('/catalog', createServiceProxy(config.services.catalog, '/api/catalog'));
 proxyRouter.use('/albums', createServiceProxy(config.services.catalog, '/api/albums'));
 proxyRouter.use('/artists', createServiceProxy(config.services.catalog, '/api/artists'));
 proxyRouter.use('/tracks', createServiceProxy(config.services.catalog, '/api/tracks'));
+proxyRouter.use('/genres', createServiceProxy(config.services.catalog, '/api/genres'));
+proxyRouter.use('/search', createServiceProxy(config.services.catalog, '/api/search'));
 
 // Playlist Service: /api/playlists, /api/favorites
 proxyRouter.use('/playlists', createServiceProxy(config.services.playlist, '/api/playlists'));

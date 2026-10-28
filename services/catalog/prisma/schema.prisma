@@ -1,0 +1,87 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum TrackStatus {
+  PENDING
+  PROCESSING
+  READY
+  FAILED
+}
+
+model Genre {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  slug      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  tracks    Track[]
+
+  @@map("genres")
+}
+
+model Artist {
+  id        String   @id @default(cuid())
+  name      String
+  bio       String?
+  avatarUrl String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  albums    Album[]
+  tracks    Track[]
+
+  @@index([name])
+  @@map("artists")
+}
+
+model Album {
+  id          String    @id @default(cuid())
+  title       String
+  coverUrl    String?
+  releaseYear Int?
+  artistId    String
+  artist      Artist    @relation(fields: [artistId], references: [id], onDelete: Restrict)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  tracks      Track[]
+
+  @@index([artistId])
+  @@index([title])
+  @@map("albums")
+}
+
+model Track {
+  id             String      @id @default(cuid())
+  title          String
+  duration       Float       @default(0)
+  bitrate        Int?
+  format         String      @default("mp3")
+  originalFormat String      @default("mp3")
+  rawStorageKey  String?
+  storageKey     String?
+  waveformPeaks  Float[]     @default([])
+  variants       Json        @default("[]")
+  status         TrackStatus @default(PENDING)
+  playCount      Int         @default(0)
+  trackNumber    Int?
+  artistId       String
+  artist         Artist      @relation(fields: [artistId], references: [id], onDelete: Restrict)
+  albumId        String?
+  album          Album?      @relation(fields: [albumId], references: [id], onDelete: SetNull)
+  genreId        String?
+  genre          Genre?      @relation(fields: [genreId], references: [id], onDelete: SetNull)
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  @@index([artistId])
+  @@index([albumId])
+  @@index([genreId])
+  @@index([status, createdAt])
+  @@index([title])
+  @@map("tracks")
+}

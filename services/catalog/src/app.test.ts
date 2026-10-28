@@ -1,0 +1,163 @@
+import { describe, it, expect, beforeAll } from 'vitest';
+import request from 'supertest';
+import { createApp } from './app.js';
+import { Express } from 'express';
+
+describe('Catalog Service Integration Tests', () => {
+  let app: Express;
+
+  beforeAll(() => {
+    app = createApp();
+  });
+
+  it('GET /health returns healthy status and dependencies', async () => {
+    const res = await request(app).get('/health');
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe('healthy');
+    expect(res.body.dependencies.database).toBe('up');
+  });
+
+  it('GET /tracks returns paginated tracks with standardized envelope', async () => {
+    const res = await request(app).get('/tracks');
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(Array.isArray(res.body.data)).toBe(true);
+    expect(res.body.data.length).toBeGreaterThan(0);
+    expect(res.body.meta).toBeDefined();
+    expect(res.body.meta.page).toBe(1);
+    expect(res.body.meta.total).toBeGreaterThanOrEqual(12);
+
+    // Verify first track fields
+    const track = res.body.data[0];
+    expect(track.id).toBeDefined();
+    expect(track.title).toBeDefined();
+    expect(track.duration).toBeGreaterThan(0);
+    expect(track.status).toBe('READY');
+    expect(track.artist).toBeDefined();
+    expect(track.genre).toBeDefined();
+  });
+
+  it('GET /tracks with genre filter returns filtered tracks', async () => {
+    const res = await request(app).get('/tracks?genre=synthwave');
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(Array.isArray(res.body.data)).toBe(true);
+    expect(res.body.data.length).toBeGreaterThan(0);
+
+    for (const track of res.body.data) {
+      expect(track.genre.toLowerCase()).toBe('synthwave');
+    }
+  });
+
+  it('GET /tracks/:id returns track with 128 normalized waveform peaks', async () => {
+    // First get a track ID
+    const listRes = await request(app).get('/tracks?limit=1');
+    const trackId = listRes.body.data[0].id;
+
+    const res = await request(app).get(`/tracks/${trackId}`);
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data.id).toBe(trackId);
+    expect(Array.isArray(res.body.data.waveformPeaks)).toBe(true);
+    expect(res.body.data.waveformPeaks.length).toBe(128);
+
+    // Verify amplitude peaks are normalized between 0.0 and 1.0
+    for (const peak of res.body.data.waveformPeaks) {
+      expect(typeof peak).toBe('number');
+      expect(peak).toBeGreaterThanOrEqual(0);
+      expect(peak).toBeLessThanOrEqual(1.0);
+    }
+  });
+
+  it('GET /tracks/:id with nonexistent ID returns 404', async () => {
+    const res = await request(app).get('/tracks/nonexistent-track-id');
+    expect(res.status).toBe(404);
+    expect(res.body.success).toBe(false);
+    expect(res.body.error.code).toBe('TRACK_NOT_FOUND');
+  });
+
+  it('GET /artists returns artists with track counts', async () => {
+    const res = await request(app).get('/artists');
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(Array.isArray(res.body.data)).toBe(true);
+    expect(res.body.data.length).toBeGreaterThanOrEqual(4);
+
+    const artist = res.body.data[0];
+    expect(artist.name).toBeDefined();
+    expect(artist._count.tracks).toBeGreaterThanOrEqual(1);
+  });
+
+  it('GET /artists/:id returns artist details and their tracks', async () => {
+    const listRes = await request(app).get('/artists');
+    const artistId = listRes.body.data[0].id;
+
+    const res = await request(app).get(`/artists/${artistId}`);
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data.id).toBe(artistId);
+    expect(Array.isArray(res.body.data.tracks)).toBe(true);
+  });
+
+  it('GET /albums returns albums with artist details', async () => {
+    const res = await request(app).get('/albums');
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(Array.isArray(res.body.data)).toBe(true);
+    expect(res.body.data.length).toBeGreaterThanOrEqual(5);
+
+    const album = res.body.data[0];
+    expect(album.title).toBeDefined();
+    expect(album.artist).toBeDefined();
+  });
+
+  it('GET /albums/:id returns album with ordered tracks', async () => {
+    const listRes = await request(app).get('/albums');
+    const albumId = listRes.body.data[0].id;
+
+    const res = await request(app).get(`/albums/${albumId}`);
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data.id).toBe(albumId);
+    expect(Array.isArray(res.body.data.tracks)).toBe(true);
+  });
+
+  it('GET /genres returns all genre categories', async () => {
+    const res = await request(app).get('/genres');
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(Array.isArray(res.body.data)).toBe(true);
+    expect(res.body.data.length).toBeGreaterThanOrEqual(6);
+  });
+
+  it('GET /search with query returns multi-entity search results', async () => {
+    const res = await request(app).get('/search?q=Mirage');
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data.query).toBe('Mirage');
+    expect(Array.isArray(res.body.data.artists)).toBe(true);
+    expect(res.body.data.artists.length).toBeGreaterThanOrEqual(1);
+    expect(res.body.data.artists[0].name).toBe('Neon Mirage');
+
+    // Also check tracks
+    expect(Array.isArray(res.body.data.tracks)).toBe(true);
+    expect(res.body.data.tracks.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('GET /search with empty query returns empty results', async () => {
+    const res = await request(app).get('/search?q=');
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data.tracks).toEqual([]);
+    expect(res.body.data.artists).toEqual([]);
+    expect(res.body.data.albums).toEqual([]);
+  });
+
+  it('Gateway route aliases (/api/catalog/tracks and /catalog/tracks) work identical', async () => {
+    const res1 = await request(app).get('/api/catalog/tracks?limit=2');
+    const res2 = await request(app).get('/catalog/tracks?limit=2');
+    expect(res1.status).toBe(200);
+    expect(res2.status).toBe(200);
+    expect(res1.body.data.length).toBe(res2.body.data.length);
+  });
+});
