@@ -78,3 +78,6 @@ desktop.ini
 .agent/
 _agents/
 _agent/
+
+# Generated Prisma clients
+**/src/generated/

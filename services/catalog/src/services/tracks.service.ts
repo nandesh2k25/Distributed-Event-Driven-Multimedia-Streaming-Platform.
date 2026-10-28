@@ -109,6 +109,14 @@ export class TracksService {
     return formatted;
   }
 
+  /** Fetches many tracks in one round-trip (used by the Playlist Service); order is not guaranteed. */
+  async getTracksByIds(ids: string[]) {
+    return prisma.track.findMany({
+      where: { id: { in: ids } },
+      include: { artist: true, album: true, genre: true }
+    });
+  }
+
   async createTrack(data: {
     title: string;
     artistId: string;

@@ -1,6 +1,8 @@
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
 import { createApp } from './app.js';
+import { prisma } from './lib/prisma.js';
+import { delCachePattern } from './lib/redis.js';
 import { Express } from 'express';
 
 describe('Catalog Service Integration Tests', () => {
@@ -159,5 +161,67 @@ describe('Catalog Service Integration Tests', () => {
     expect(res1.status).toBe(200);
     expect(res2.status).toBe(200);
     expect(res1.body.data.length).toBe(res2.body.data.length);
+  });
+
+  describe('batch lookup', () => {
+    it('POST /tracks/batch returns the requested tracks with relations, ignoring unknown and duplicate ids', async () => {
+      const list = await request(app).get('/tracks?limit=2');
+      const [a, b] = list.body.data;
+      const res = await request(app).post('/tracks/batch').send({ ids: [a.id, b.id, a.id, 'does-not-exist'] });
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.map((t: { id: string }) => t.id).sort()).toEqual([a.id, b.id].sort());
+      expect(res.body.data[0].artist).toBeDefined();
+    });
+
+    it('POST /tracks/batch validates the body', async () => {
+      expect((await request(app).post('/tracks/batch').send({ ids: [] })).status).toBe(400);
+      expect((await request(app).post('/tracks/batch').send({})).status).toBe(400);
+    });
+  });
+
+  describe('track updates', () => {
+    it('PATCH /tracks/:id rejects fields outside the allowlist and unknown ids', async () => {
+      const bad = await request(app).patch('/tracks/anything').send({ artistId: 'hijack' });
+      expect(bad.status).toBe(400);
+      expect(bad.body.error.code).toBe('VALIDATION_ERROR');
+
+      const invalidPeaks = await request(app).patch('/tracks/anything').send({ waveformPeaks: [2] });
+      expect(invalidPeaks.status).toBe(400);
+
+      const missing = await request(app).patch('/tracks/does-not-exist').send({ status: 'FAILED' });
+      expect(missing.status).toBe(404);
+    });
+  });
+
+  describe('resolve (find-or-create)', () => {
+    // These tests create rows; remove them so other tests see only the seeded catalog.
+    const cleanup = async () => {
+      await prisma.album.deleteMany({ where: { title: { equals: 'Resolver Album', mode: 'insensitive' } } });
+      await prisma.artist.deleteMany({ where: { name: { equals: 'Catalog Test Resolver', mode: 'insensitive' } } });
+      await prisma.genre.deleteMany({ where: { slug: 'resolver-genre' } });
+      await Promise.all(['catalog:artists:*', 'catalog:albums:*', 'catalog:genres'].map(delCachePattern));
+    };
+    beforeAll(cleanup);
+    afterAll(cleanup);
+
+    it('returns the same artist, genre and album for repeated and differently-cased names', async () => {
+      const a1 = await request(app).post('/artists/resolve').send({ name: 'Catalog Test Resolver' });
+      const a2 = await request(app).post('/artists/resolve').send({ name: 'catalog test resolver' });
+      expect(a1.body.data.id).toBe(a2.body.data.id);
+
+      const g1 = await request(app).post('/genres/resolve').send({ name: 'Resolver Genre' });
+      const g2 = await request(app).post('/genres/resolve').send({ name: 'resolver  genre' });
+      expect(g1.body.data.id).toBe(g2.body.data.id);
+
+      const al1 = await request(app).post('/albums/resolve').send({ title: 'Resolver Album', artistId: a1.body.data.id });
+      const al2 = await request(app).post('/albums/resolve').send({ title: 'RESOLVER ALBUM', artistId: a1.body.data.id });
+      expect(al1.body.data.id).toBe(al2.body.data.id);
+    });
+
+    it('validates resolve bodies', async () => {
+      expect((await request(app).post('/artists/resolve').send({ name: '  ' })).status).toBe(400);
+      expect((await request(app).post('/albums/resolve').send({ title: 'x' })).status).toBe(400);
+    });
   });
 });

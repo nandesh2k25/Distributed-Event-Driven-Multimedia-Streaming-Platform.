@@ -75,6 +75,10 @@ export const UpdateTrackSchema = z
   .partial()
   .strict();
 
+export const BatchTrackIdsSchema = z.object({
+  ids: z.array(z.string().trim().min(1)).min(1, 'Provide at least one id').max(200, 'At most 200 ids per request')
+});
+
 export type UpdateTrackInput = z.infer<typeof UpdateTrackSchema>;
 export type PaginationQuery= z.infer<typeof PaginationQuerySchema>;
 export type TrackQuery = z.infer<typeof TrackQuerySchema>;

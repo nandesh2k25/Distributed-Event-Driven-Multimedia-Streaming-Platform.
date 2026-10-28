@@ -20,7 +20,7 @@ export function createApp(): express.Application {
     cors({
       origin: config.corsOrigin,
       methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-      allowedHeaders: ['Content-Type', 'Authorization', 'Range', 'X-Correlation-ID'],
+      allowedHeaders: ['Content-Type', 'Authorization', 'Range', 'X-Correlation-ID', 'X-User-Id'],
       exposedHeaders: [
         'Content-Range',
         'Accept-Ranges',

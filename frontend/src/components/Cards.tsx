@@ -1,6 +1,8 @@
 import { Link } from 'react-router-dom';
 import { Disc3, Pause, Play, User } from 'lucide-react';
 import { useAudioPlayer } from '../context/AudioPlayerContext';
+import { AddToPlaylistMenu } from './AddToPlaylistMenu';
+import { HeartButton } from './HeartButton';
 import { type Album, type Artist, type Track, formatDuration } from '../lib/api';
 
 export function AlbumCard({ album }: { album: Album }) {
@@ -38,13 +40,27 @@ export function ArtistCard({ artist }: { artist: Artist }) {
   );
 }
 
-export function TrackRow({ track, index, queue }: { track: Track; index?: number; queue?: Track[] }) {
+interface TrackRowProps {
+  track: Track;
+  index?: number;
+  queue?: Track[];
+  /** Extra controls rendered after the duration (e.g. reorder / remove in a playlist). */
+  trailing?: React.ReactNode;
+  /** Hide the "add to playlist" menu, e.g. when the row already belongs to a playlist. */
+  hidePlaylistMenu?: boolean;
+  liProps?: React.LiHTMLAttributes<HTMLLIElement>;
+}
+
+export function TrackRow({ track, index, queue, trailing, hidePlaylistMenu, liProps }: TrackRowProps) {
   const player = useAudioPlayer();
   const isCurrent = player.currentTrack?.id === track.id;
   const isPlaying = isCurrent && player.isPlaying;
 
   return (
-    <li className={`group flex items-center gap-4 rounded-md px-3 py-2 hover:bg-zinc-800 ${isCurrent ? 'bg-zinc-800/60' : ''}`}>
+    <li
+      {...liProps}
+      className={`group flex items-center gap-4 rounded-md px-3 py-2 hover:bg-zinc-800 ${isCurrent ? 'bg-zinc-800/60' : ''} ${liProps?.className ?? ''}`}
+    >
       <button
         onClick={() => (isCurrent ? player.togglePlay() : player.playTrack(track, queue))}
         aria-label={`${isPlaying ? 'Pause' : 'Play'} ${track.title}`}
@@ -78,7 +94,10 @@ export function TrackRow({ track, index, queue }: { track: Track; index?: number
           {typeof track.genre === 'string' ? track.genre : track.genre.name}
         </span>
       )}
+      <HeartButton trackId={track.id} title={track.title} />
+      {!hidePlaylistMenu && <AddToPlaylistMenu trackId={track.id} title={track.title} />}
       <span className="w-12 text-right text-sm tabular-nums text-zinc-400">{formatDuration(track.duration)}</span>
+      {trailing}
     </li>
   );
 }

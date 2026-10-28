@@ -1,6 +1,7 @@
 import { Pause, Play, SkipBack, SkipForward, Volume2, VolumeX } from 'lucide-react';
 import { useAudioPlayer } from '../context/AudioPlayerContext';
 import { formatDuration } from '../lib/api';
+import { HeartButton } from './HeartButton';
 import { WaveformVisualizer } from './WaveformVisualizer';
 
 export function PlayerBar() {
@@ -18,7 +19,10 @@ export function PlayerBar() {
       <div className="min-w-0 flex-1 basis-0 sm:flex-none sm:basis-60">
         {track ? (
           <>
-            <p className="truncate text-sm font-medium">{track.title}</p>
+            <div className="flex items-center gap-2">
+              <p className="truncate text-sm font-medium">{track.title}</p>
+              <HeartButton trackId={track.id} title={track.title} />
+            </div>
             <p className="truncate text-xs text-zinc-400">{track.artist?.name}</p>
           </>
         ) : (

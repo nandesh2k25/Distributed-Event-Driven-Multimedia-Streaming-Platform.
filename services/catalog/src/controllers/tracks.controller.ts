@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { tracksService } from '../services/tracks.service.js';
 import type { Prisma } from '@prisma/client';
-import { TrackQuerySchema, UpdateTrackSchema, createSuccessResponse, createErrorResponse } from '@music/shared';
+import { BatchTrackIdsSchema, TrackQuerySchema, UpdateTrackSchema, createSuccessResponse, createErrorResponse } from '@music/shared';
 
 export async function listTracks(req: Request, res: Response) {
   try {
@@ -30,6 +30,26 @@ export async function listTracks(req: Request, res: Response) {
     return res.status(500).json(
       createErrorResponse('INTERNAL_ERROR', 'Failed to retrieve tracks from catalog')
     );
+  }
+}
+
+export async function getTracksBatch(req: Request, res: Response) {
+  const parsed = BatchTrackIdsSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json(
+      createErrorResponse(
+        'VALIDATION_ERROR',
+        'Invalid batch request',
+        parsed.error.errors.map((e) => ({ field: e.path.join('.'), message: e.message }))
+      )
+    );
+  }
+  try {
+    const tracks = await tracksService.getTracksByIds([...new Set(parsed.data.ids)]);
+    return res.status(200).json(createSuccessResponse(tracks));
+  } catch (err) {
+    req.log?.error({ err }, 'Failed to batch-fetch tracks');
+    return res.status(500).json(createErrorResponse('INTERNAL_ERROR', 'Failed to retrieve tracks'));
   }
 }
 

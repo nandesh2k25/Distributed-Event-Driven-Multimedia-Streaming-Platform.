@@ -16,6 +16,7 @@ For a detailed breakdown of the system architecture, microservices design, and M
 | **RabbitMQ 3** | `5672` / `15672` | AMQP message broker for asynchronous media transcoding jobs & web management dashboard |
 | **MinIO S3** | `9000` / `9001` | High-performance S3-compatible object storage (`raw-audio` and `processed-audio` buckets) & console UI |
 | **Catalog Service** | `3001` | Prisma/PostgreSQL catalog (artists, albums, tracks, genres), search, Redis-cached listings |
+| **Playlist Service** | `3002` | Prisma/PostgreSQL (`music_playlist`): playlists, ordered tracks, favorites; track data comes from the Catalog Service |
 | **Ingestion Service** | `3003` | Validates and streams uploads to MinIO, creates a `PROCESSING` track, dispatches jobs to RabbitMQ (`audio.events`) |
 | **Transcode Worker** | N/A | Dockerized FFmpeg worker: 320 kbps MP3 + 128 waveform peaks, DLQ for failures |
 | **Streaming Service** | `3004` | HTTP 206 byte-range audio delivery from MinIO (`/api/stream/:trackId`) |
@@ -86,7 +87,7 @@ Compile the shared package first (the services import its compiled output), then
 pnpm build
 ```
 
-### 6. Set Up the Catalog Database
+### 6. Set Up the Databases
 
 Apply the Prisma migrations and load the sample artists, albums and tracks (the seed is idempotent):
 
@@ -94,6 +95,14 @@ Apply the Prisma migrations and load the sample artists, albums and tracks (the 
 pnpm --filter @music/catalog exec prisma generate
 pnpm --filter @music/catalog exec prisma migrate deploy
 pnpm seed
+```
+
+The Playlist Service has its own database (`music_playlist`). `pnpm build` already generates its Prisma client; apply its migration with:
+
+```bash
+# Prisma CLI commands read DATABASE_URL (the service itself falls back to the local default)
+DATABASE_URL="postgresql://postgres:postgrespassword@localhost:5432/music_playlist?schema=public" \
+  pnpm --filter @music/playlist exec prisma migrate deploy
 ```
 
 The seed only stores metadata. To make the seeded tracks playable, start the Catalog Service (step 8) and upload generated demo audio to MinIO:
@@ -118,6 +127,7 @@ Run each in its own terminal. Dev mode gives hot reload:
 pnpm --filter @music/catalog dev    # Catalog Service  -> http://localhost:3001
 pnpm --filter @music/streaming dev  # Streaming Service-> http://localhost:3004
 pnpm --filter @music/ingestion dev  # Ingestion Service-> http://localhost:3003
+pnpm --filter @music/playlist dev   # Playlist Service -> http://localhost:3002
 pnpm --filter @music/gateway dev    # API Gateway      -> http://localhost:8080
 pnpm --filter @music/frontend dev   # React frontend   -> http://localhost:5173
 ```
@@ -131,11 +141,13 @@ docker logs -f music-worker     # "Worker consuming audio.transcode.queue"
 
 The worker reaches the Catalog Service on your host at `host.docker.internal:3001`, so keep the catalog running. To run the worker on the host instead, install FFmpeg and run `pnpm --filter @music/worker dev`.
 
-Or run the compiled builds with `pnpm --filter <package> start` (`@music/catalog`, `@music/streaming`, `@music/ingestion`, `@music/gateway`). The frontend dev server proxies `/api/*` to the gateway; set `GATEWAY_URL` to point it elsewhere.
+Or run the compiled builds with `pnpm --filter <package> start` (`@music/catalog`, `@music/streaming`, `@music/ingestion`, `@music/playlist`, `@music/gateway`). The frontend dev server proxies `/api/*` to the gateway; set `GATEWAY_URL` to point it elsewhere.
 
 Open **http://localhost:5173** to browse the catalog, search, and play tracks from the persistent bottom player bar. Use **Upload** in the header to add your own audio: the Upload Studio shows the track moving from `PROCESSING` to `READY`, and playing it shows its waveform in the player bar (click or drag the waveform to seek).
 
-> **Note:** The Playlist service is not implemented yet (ticket 05). Its gateway routes return `503` until it exists.
+Use **Playlists** to create playlists, then the list-plus icon on any track to add it. Inside a playlist you can drag rows or use the up/down arrows to reorder (saved immediately) and remove tracks. The heart on any track toggles a favorite, and **Favorites** lists them.
+
+> **Note:** There is no authentication yet. The Playlist Service identifies the caller by the `X-User-Id` request header and falls back to a shared `demo-user`, so everyone using the app without that header shares one library. Do not expose it publicly as-is.
 
 ---
 
@@ -178,6 +190,22 @@ curl http://localhost:8080/api/artists
 curl http://localhost:8080/api/albums
 curl http://localhost:8080/api/genres
 ```
+
+### Playlists and Favorites
+
+```bash
+H="X-User-Id: alice"   # optional; defaults to the shared demo user
+PL=$(curl -s -X POST http://localhost:8080/api/playlists -H "$H" -H 'content-type: application/json' \
+  -d '{"title":"Road Trip"}' | node -pe "JSON.parse(require('fs').readFileSync(0)).data.id")
+
+curl -X POST http://localhost:8080/api/playlists/$PL/tracks -H "$H" -H 'content-type: application/json' -d '{"trackId":"<id>"}'
+curl -X PUT  http://localhost:8080/api/playlists/$PL/tracks/order -H "$H" -H 'content-type: application/json' -d '{"trackIds":["<id2>","<id1>"]}'
+curl -X DELETE http://localhost:8080/api/playlists/$PL/tracks/<id1> -H "$H"
+curl http://localhost:8080/api/playlists/$PL -H "$H"                      # tracklist in order, with track details
+curl -X PUT http://localhost:8080/api/favorites/<id> -H "$H"              # also DELETE, or POST .../<id>/toggle
+```
+
+Reordering requires the full list of the playlist's `trackIds`; positions stay contiguous (`0..n-1`). A track can appear in a playlist once (`409 DUPLICATE_TRACK` otherwise).
 
 ### Upload and Transcoding Pipeline
 
@@ -232,7 +260,7 @@ curl -i -H "X-Correlation-ID: 9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d" http://local
 ├── frontend/           # React + Vite + Tailwind SPA
 ├── gateway/            # Express ingress reverse proxy & health aggregator
 ├── scripts/            # Infrastructure bootstrap & database init scripts
-├── services/           # Backend microservices (Catalog, Ingestion, Worker, Streaming; Playlist to come)
+├── services/           # Backend microservices (Catalog, Playlist, Ingestion, Worker, Streaming)
 ├── shared/             # Shared TypeScript models, DTOs, events & range utilities
 ├── docker-compose.yml  # Multi-container orchestration specification
 ├── package.json        # Monorepo root scripts & configuration

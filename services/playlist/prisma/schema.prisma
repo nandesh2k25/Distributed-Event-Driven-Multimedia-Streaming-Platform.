@@ -1,0 +1,52 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Generated outside @prisma/client so it cannot overwrite the Catalog Service's client,
+// which pnpm would otherwise share through the same node_modules/.prisma directory.
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/client"
+}
+
+model Playlist {
+  id          String          @id @default(cuid())
+  title       String
+  description String?
+  userId      String
+  isPublic    Boolean         @default(true)
+  coverUrl    String?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  tracks      PlaylistTrack[]
+
+  @@index([userId, updatedAt])
+  @@map("playlists")
+}
+
+model PlaylistTrack {
+  id         String   @id @default(cuid())
+  playlistId String
+  playlist   Playlist @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+  // References a Catalog Service track by id; there is no cross-database foreign key.
+  trackId    String
+  position   Int
+  addedAt    DateTime @default(now())
+
+  @@unique([playlistId, position])
+  @@unique([playlistId, trackId])
+  @@index([trackId])
+  @@map("playlist_tracks")
+}
+
+model Favorite {
+  id        String   @id @default(cuid())
+  userId    String
+  trackId   String
+  createdAt DateTime @default(now())
+
+  @@unique([userId, trackId])
+  @@index([userId, createdAt])
+  @@map("favorites")
+}

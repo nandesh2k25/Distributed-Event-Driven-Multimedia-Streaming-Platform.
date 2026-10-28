@@ -16,14 +16,35 @@ export interface SearchResults { tracks: Track[]; artists: Artist[]; albums: Alb
 
 interface Envelope<T> { success: boolean; data: T; meta?: Meta; error?: { message: string } }
 
-async function get<T>(path: string, signal?: AbortSignal): Promise<{ data: T; meta?: Meta }> {
-  const res = await fetch(`/api${path}`, { signal });
-  const body = (await res.json().catch(() => null)) as Envelope<T> | null;
-  if (!res.ok || !body?.success) {
-    throw new Error(body?.error?.message ?? `Request failed (${res.status})`);
-  }
-  return { data: body.data, meta: body.meta };
+export interface Playlist {
+  id: string; title: string; description?: string | null; isPublic: boolean;
+  trackCount?: number; updatedAt: string;
 }
+export interface PlaylistEntry { trackId: string; position: number; addedAt: string; track: Track | null }
+export interface PlaylistDetail extends Playlist { isOwner: boolean; tracks: PlaylistEntry[] }
+export interface FavoriteEntry { favoritedAt: string; track: Track }
+
+async function request<T>(
+  method: string,
+  path: string,
+  body?: unknown,
+  signal?: AbortSignal
+): Promise<{ data: T; meta?: Meta }> {
+  const res = await fetch(`/api${path}`, {
+    method,
+    signal,
+    headers: body === undefined ? undefined : { 'content-type': 'application/json' },
+    body: body === undefined ? undefined : JSON.stringify(body)
+  });
+  if (res.status === 204) return { data: undefined as T };
+  const parsed = (await res.json().catch(() => null)) as Envelope<T> | null;
+  if (!res.ok || !parsed?.success) {
+    throw new Error(parsed?.error?.message ?? `Request failed (${res.status})`);
+  }
+  return { data: parsed.data, meta: parsed.meta };
+}
+
+const get = <T>(path: string, signal?: AbortSignal) => request<T>('GET', path, undefined, signal);
 
 export const api = {
   tracks: (params = '', signal?: AbortSignal) => get<Track[]>(`/tracks${params}`, signal),
@@ -34,8 +55,32 @@ export const api = {
   album: (id: string, signal?: AbortSignal) => get<Album>(`/albums/${id}`, signal),
   genres: (signal?: AbortSignal) => get<Genre[]>('/genres', signal),
   search: (q: string, signal?: AbortSignal) =>
-    get<SearchResults>(`/search?q=${encodeURIComponent(q)}`, signal)
+    get<SearchResults>(`/search?q=${encodeURIComponent(q)}`, signal),
+
+  playlists: (signal?: AbortSignal) => get<Playlist[]>('/playlists', signal),
+  playlist: (id: string, signal?: AbortSignal) => get<PlaylistDetail>(`/playlists/${id}`, signal),
+  createPlaylist: (input: { title: string; description?: string; isPublic: boolean }) =>
+    request<Playlist>('POST', '/playlists', input),
+  deletePlaylist: (id: string) => request<void>('DELETE', `/playlists/${id}`),
+  addToPlaylist: (id: string, trackId: string) => request<unknown>('POST', `/playlists/${id}/tracks`, { trackId }),
+  removeFromPlaylist: (id: string, trackId: string) => request<void>('DELETE', `/playlists/${id}/tracks/${trackId}`),
+  reorderPlaylist: (id: string, trackIds: string[]) => request<unknown>('PUT', `/playlists/${id}/tracks/order`, { trackIds }),
+
+  favorites: (signal?: AbortSignal) => get<FavoriteEntry[]>('/favorites', signal),
+  favoriteIds: (signal?: AbortSignal) => get<string[]>('/favorites/ids', signal),
+  setFavorite: (trackId: string, favorited: boolean) =>
+    request<unknown>(favorited ? 'PUT' : 'DELETE', `/favorites/${trackId}`)
 };
+
+/** Returns a copy of `list` with the item at `from` moved to index `to` (clamped). */
+export function moveItem<T>(list: readonly T[], from: number, to: number): T[] {
+  const next = [...list];
+  if (from < 0 || from >= next.length) return next;
+  const target = Math.min(Math.max(to, 0), next.length - 1);
+  const [item] = next.splice(from, 1);
+  next.splice(target, 0, item as T);
+  return next;
+}
 
 export function formatDuration(seconds: number): string {
   const s = Math.round(seconds);
