@@ -1,0 +1,104 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: music-postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgrespassword
+      POSTGRES_DB: music_catalog
+      POSTGRES_MULTIPLE_DATABASES: music_catalog,music_playlist
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-postgres.sh:/docker-entrypoint-initdb.d/init-postgres.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d music_catalog"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - music-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: music-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - music-network
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: music-rabbitmq
+    restart: unless-stopped
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+    networks:
+      - music-network
+
+  minio:
+    image: cgr.dev/chainguard/minio:latest
+    container_name: music-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - minio_data:/data
+    networks:
+      - music-network
+
+  minio-create-buckets:
+    image: drpsychick/minio-client:latest
+    container_name: music-minio-setup
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      echo 'Waiting for MinIO service...';
+      until mc alias set myminio http://minio:9000 minioadmin minioadmin; do
+        sleep 1;
+      done;
+      mc mb myminio/raw-audio --ignore-existing;
+      mc mb myminio/processed-audio --ignore-existing;
+      mc anonymous set download myminio/processed-audio;
+      echo 'MinIO buckets raw-audio and processed-audio initialized successfully';
+      exit 0;
+      "
+    networks:
+      - music-network
+
+volumes:
+  postgres_data:
+  redis_data:
+  rabbitmq_data:
+  minio_data:
+
+networks:
+  music-network:
+    driver: bridge
