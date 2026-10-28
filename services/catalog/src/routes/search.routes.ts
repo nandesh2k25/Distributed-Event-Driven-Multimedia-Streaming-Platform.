@@ -1,6 +1,8 @@
 import { Router } from 'express';
-import { searchCatalog } from '../controllers/search.controller.js';
+import type { createSearchController } from '../controllers/search.controller.js';
 
-export const searchRouter: Router = Router();
-
-searchRouter.get('/', searchCatalog);
+export function createSearchRouter(c: ReturnType<typeof createSearchController>): Router {
+  const router = Router();
+  router.get('/', c.searchCatalog);
+  return router;
+}

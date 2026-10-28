@@ -1,10 +1,12 @@
 import { Router } from 'express';
-import { listTracks, getTrackById, getTracksBatch, createTrack, updateTrack } from '../controllers/tracks.controller.js';
+import type { createTracksController } from '../controllers/tracks.controller.js';
 
-export const tracksRouter: Router = Router();
-
-tracksRouter.get('/', listTracks);
-tracksRouter.post('/batch', getTracksBatch);
-tracksRouter.get('/:id', getTrackById);
-tracksRouter.post('/', createTrack);
-tracksRouter.patch('/:id', updateTrack);
+export function createTracksRouter(c: ReturnType<typeof createTracksController>): Router {
+  const router = Router();
+  router.get('/', c.listTracks);
+  router.post('/batch', c.getTracksBatch);
+  router.get('/:id', c.getTrackById);
+  router.post('/', c.createTrack);
+  router.patch('/:id', c.updateTrack);
+  return router;
+}

@@ -1,39 +1,28 @@
 import { Router, Request, Response } from 'express';
-import { prisma } from '../lib/prisma.js';
-import { redis } from '../lib/redis.js';
+import type { CatalogDeps } from '../services/deps.js';
 
-export const healthRouter: Router = Router();
+export function createHealthRouter({ prisma, cache }: CatalogDeps): Router {
+  const router = Router();
 
-healthRouter.get('/', async (_req: Request, res: Response) => {
-  let dbStatus = 'down';
-  let redisStatus = 'down';
-
-  try {
-    await prisma.$queryRaw`SELECT 1`;
-    dbStatus = 'up';
-  } catch (err) {
-    dbStatus = 'error';
-  }
-
-  try {
-    if (redis && redis.status === 'ready') {
-      const ping = await redis.ping();
-      redisStatus = ping === 'PONG' ? 'up' : 'error';
+  router.get('/', async (_req: Request, res: Response) => {
+    let dbStatus = 'down';
+    try {
+      await prisma.$queryRaw`SELECT 1`;
+      dbStatus = 'up';
+    } catch {
+      dbStatus = 'error';
     }
-  } catch (err) {
-    redisStatus = 'error';
-  }
 
-  const isHealthy = dbStatus === 'up';
-  const statusCode = isHealthy ? 200 : 503;
+    const redisStatus = await cache.health();
+    const isHealthy = dbStatus === 'up';
 
-  return res.status(statusCode).json({
-    status: isHealthy ? 'healthy' : 'unhealthy',
-    timestamp: new Date().toISOString(),
-    service: 'catalog-service',
-    dependencies: {
-      database: dbStatus,
-      redis: redisStatus
-    }
+    return res.status(isHealthy ? 200 : 503).json({
+      status: isHealthy ? 'healthy' : 'unhealthy',
+      timestamp: new Date().toISOString(),
+      service: 'catalog-service',
+      dependencies: { database: dbStatus, redis: redisStatus }
+    });
   });
-});
+
+  return router;
+}

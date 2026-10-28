@@ -1,9 +1,14 @@
 import { Router } from 'express';
-import { resolveAlbum } from '../controllers/resolve.controller.js';
-import { listAlbums, getAlbumById } from '../controllers/albums.controller.js';
+import type { createAlbumsController } from '../controllers/albums.controller.js';
+import type { createResolveController } from '../controllers/resolve.controller.js';
 
-export const albumsRouter: Router = Router();
-
-albumsRouter.post('/resolve', resolveAlbum);
-albumsRouter.get('/', listAlbums);
-albumsRouter.get('/:id', getAlbumById);
+export function createAlbumsRouter(
+  c: ReturnType<typeof createAlbumsController>,
+  resolve: ReturnType<typeof createResolveController>
+): Router {
+  const router = Router();
+  router.post('/resolve', resolve.resolveAlbum);
+  router.get('/', c.listAlbums);
+  router.get('/:id', c.getAlbumById);
+  return router;
+}

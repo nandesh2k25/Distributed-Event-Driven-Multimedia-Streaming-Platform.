@@ -1,9 +1,14 @@
 import { Router } from 'express';
-import { resolveArtist } from '../controllers/resolve.controller.js';
-import { listArtists, getArtistById } from '../controllers/artists.controller.js';
+import type { createArtistsController } from '../controllers/artists.controller.js';
+import type { createResolveController } from '../controllers/resolve.controller.js';
 
-export const artistsRouter: Router = Router();
-
-artistsRouter.post('/resolve', resolveArtist);
-artistsRouter.get('/', listArtists);
-artistsRouter.get('/:id', getArtistById);
+export function createArtistsRouter(
+  c: ReturnType<typeof createArtistsController>,
+  resolve: ReturnType<typeof createResolveController>
+): Router {
+  const router = Router();
+  router.post('/resolve', resolve.resolveArtist);
+  router.get('/', c.listArtists);
+  router.get('/:id', c.getArtistById);
+  return router;
+}

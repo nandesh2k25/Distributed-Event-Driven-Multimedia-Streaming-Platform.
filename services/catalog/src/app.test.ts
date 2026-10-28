@@ -2,14 +2,15 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
 import { createApp } from './app.js';
 import { prisma } from './lib/prisma.js';
-import { delCachePattern } from './lib/redis.js';
+import { createMemoryCache } from './cache/memory-cache.js';
 import { Express } from 'express';
 
 describe('Catalog Service Integration Tests', () => {
   let app: Express;
+  const cache = createMemoryCache();
 
   beforeAll(() => {
-    app = createApp();
+    app = createApp({ prisma, cache });
   });
 
   it('GET /health returns healthy status and dependencies', async () => {
@@ -163,6 +164,36 @@ describe('Catalog Service Integration Tests', () => {
     expect(res1.body.data.length).toBe(res2.body.data.length);
   });
 
+  describe('cache invalidation', () => {
+    it('shows updated artist, album and genre counts right after a track is added or changed', async () => {
+      const artistId = (await request(app).get('/artists')).body.data[0].id as string;
+      const countFor = async () => {
+        const list = (await request(app).get('/artists')).body.data as { id: string; _count: { tracks: number } }[];
+        return list.find((a) => a.id === artistId)!._count.tracks;
+      };
+      const before = await countFor(); // warms the cache
+
+      const created = await request(app).post('/tracks').send({ title: 'Cache Probe', artistId, status: 'PROCESSING' });
+      expect(created.status).toBe(201);
+      const trackId = created.body.data.id as string;
+
+      try {
+        expect(await countFor()).toBe(before + 1); // creating a track must not leave a stale artists list
+
+        const artistPage = (await request(app).get(`/artists/${artistId}`)).body.data;
+        expect(artistPage.tracks.some((t: { id: string }) => t.id === trackId)).toBe(false); // not READY yet
+
+        await request(app).patch(`/tracks/${trackId}`).send({ status: 'READY' });
+        const refreshed = (await request(app).get(`/artists/${artistId}`)).body.data;
+        expect(refreshed.tracks.some((t: { id: string }) => t.id === trackId)).toBe(true); // artist page is not stale
+        expect((await request(app).get(`/tracks/${trackId}`)).body.data.status).toBe('READY');
+      } finally {
+        await prisma.track.delete({ where: { id: trackId } });
+        await cache.catalogChanged();
+      }
+    });
+  });
+
   describe('batch lookup', () => {
     it('POST /tracks/batch returns the requested tracks with relations, ignoring unknown and duplicate ids', async () => {
       const list = await request(app).get('/tracks?limit=2');
@@ -200,7 +231,7 @@ describe('Catalog Service Integration Tests', () => {
       await prisma.album.deleteMany({ where: { title: { equals: 'Resolver Album', mode: 'insensitive' } } });
       await prisma.artist.deleteMany({ where: { name: { equals: 'Catalog Test Resolver', mode: 'insensitive' } } });
       await prisma.genre.deleteMany({ where: { slug: 'resolver-genre' } });
-      await Promise.all(['catalog:artists:*', 'catalog:albums:*', 'catalog:genres'].map(delCachePattern));
+      await cache.catalogChanged();
     };
     beforeAll(cleanup);
     afterAll(cleanup);
