@@ -1,4 +1,4 @@
-[← Back to README](../README.md) · **[Overview](description.md)** · **[Architecture](architecture.md)** · **[Setup & Run](setup-and-run.md)** · **[API Reference](api-reference.md)** · **[Verification](verification.md)** · **[Resume Guide](resume-guide.md)**
+[← Back to README](../README.md) · **[Overview](description.md)** · **[Architecture](architecture.md)** · **[Setup & Run](setup-and-run.md)** · **[API Reference](api-reference.md)** · **[Verification](verification.md)**
 
 ---
 
@@ -52,4 +52,3 @@ For in-depth technical implementation, flow diagrams, and operating runbooks, se
 - **[Setup & Runbook](setup-and-run.md)** — Step-by-step local setup, Docker compose, migrations, and turnkey seeding.
 - **[API Reference](api-reference.md)** — Complete endpoint specifications, headers, and error codes.
 - **[Verification & Benchmark Guide](verification.md)** — Automated test suites, manual verification curls, and latency benchmarks.
-- **[Resume & Talking Points Guide](resume-guide.md)** — Architectural trade-offs and quantifiable resume metrics.

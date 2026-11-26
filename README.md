@@ -80,7 +80,6 @@ Detailed specifications, runbooks, and benchmarks are split into focused guides:
 | **[Setup & Runbook Guide](docs/setup-and-run.md)** | Step-by-step installation, environment variables, migrations, and service startup. |
 | **[API Reference Catalog](docs/api-reference.md)** | Complete endpoint specifications, payload schemas, and error code tables. |
 | **[Verification & Benchmarks](docs/verification.md)** | Automated testing suites, manual cURL smoke tests, and latency measurements. |
-| **[Resume & Interview Talking Points](docs/resume-guide.md)** | Quantifiable metrics, performance benchmarks, and architectural trade-offs. |
 
 ---
 
