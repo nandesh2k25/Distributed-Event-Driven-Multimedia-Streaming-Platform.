@@ -1,3 +1,7 @@
+[← Back to README](../README.md) · **[Overview](description.md)** · **[Architecture](architecture.md)** · **[Setup & Run](setup-and-run.md)** · **[API Reference](api-reference.md)** · **[Verification](verification.md)** · **[Resume Guide](resume-guide.md)**
+
+---
+
 # Resume and interview guide
 
 Everything in the tables below was measured on this repository, not estimated. Reproduce the latency and transcode numbers with `node scripts/bench.mjs` and the test count with `pnpm test`.
